@@ -1,6 +1,6 @@
 <?php
 // Run this script once to create the holidays table in the configured database.
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 $sql = "CREATE TABLE IF NOT EXISTS holidays (
   id INT AUTO_INCREMENT PRIMARY KEY,

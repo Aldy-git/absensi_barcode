@@ -1,6 +1,6 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/config/config.php';
 
 // Jika pengguna sudah login, redirect langsung ke dashboard
 if (!empty($_SESSION['user_id'])) {
@@ -32,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($user) {
       $isValidPassword = password_verify($password, $storedPassword)
+        || strcasecmp(md5($password), $storedPassword) === 0
         || $storedPassword === $password;
     }
 

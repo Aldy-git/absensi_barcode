@@ -1,9 +1,9 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 if (empty($_SESSION['user_id'])) {
-  header('Location: login.php');
+  header('Location: ../login.php');
   exit;
 }
 
@@ -17,7 +17,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $tanggal = $_POST['tanggal'] ?? date('Y-m-d');
   $status = $_POST['status'] ?? 'hadir';
 
-  if ($siswa_id <= 0) {
+  $holidayInfo = getHolidayInfo($tanggal, $conn);
+  if ($holidayInfo) {
+    $message = 'Tanggal ' . date('d/m/Y', strtotime($tanggal)) . ' adalah <strong>' . htmlspecialchars($holidayInfo['label']) . '</strong>. Hari libur tidak dianggap masuk dan absensi dikosongkan.';
+    $messageType = 'warning';
+  } elseif ($siswa_id <= 0) {
     $message = 'Silakan pilih siswa terlebih dahulu.';
     $messageType = 'danger';
   } else {
@@ -48,7 +52,7 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Absensi Manual</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=1.4" rel="stylesheet">
   <style>
     .siswa-row {
       padding: 10px 12px;
@@ -92,16 +96,16 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
           <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" onclick="closeMobileSidebar(event)" aria-label="Tutup Menu">✕</button>
         </div>
         <nav>
-          <a href="dashboard.php">🏠 Dashboard</a>
-          <a href="siswa.php">👥 Data Siswa</a>
+          <a href="../dashboard.php">🏠 Dashboard</a>
+          <a href="../siswa/index.php">👥 Data Siswa</a>
           <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php">📷 Scan Absensi</a>
-          <a href="absensi_manual.php" class="active">✍️ Absensi Manual</a>
+          <a href="scan.php">📷 Scan Absensi</a>
+          <a href="manual.php" class="active">✍️ Absensi Manual</a>
           <a href="riwayat.php">📜 Riwayat</a>
           <a href="laporan.php">📊 Laporan</a>
           <?php if ($role === 'admin'): ?>
-            <a href="users.php">🔒 Pengguna</a>
-            <a href="holidays_admin.php">📅 Kelola Libur</a>
+            <a href="../users/index.php">🔒 Pengguna</a>
+            <a href="../holidays/index.php">📅 Kelola Libur</a>
           <?php endif; ?>
         </nav>
       </div>
@@ -109,7 +113,7 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
         <div style="margin-bottom:10px"><strong><?= htmlspecialchars($_SESSION['username']) ?></strong>
           <div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($role) ?></div>
         </div>
-        <a href="logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
+        <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
       </div>
     </aside>
 
@@ -135,7 +139,7 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($role ?? $_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
-          <a href="logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
+          <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
       <div class="main-inner">
@@ -387,7 +391,7 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
       refreshStatusFocus();
     });
   </script>
-  <script src="assets/main.js?v=1.4"></script>
+  <script src="../assets/main.js?v=1.4"></script>
 </body>
 
 </html>

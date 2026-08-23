@@ -1,6 +1,6 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 if (empty($_SESSION['user_id'])) {
   if (isset($_POST['ajax']) || isset($_GET['ajax'])) {
@@ -8,7 +8,7 @@ if (empty($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'type' => 'danger', 'message' => 'Sesi login telah berakhir. Silakan login kembali.']);
     exit;
   }
-  header('Location: login.php');
+  header('Location: ../login.php');
   exit;
 }
 
@@ -34,6 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['ajax']) && $_POST['a
       'success' => false,
       'type' => 'danger',
       'message' => 'Kode barcode tidak boleh kosong. Silakan scan ulang.'
+    ]);
+    exit;
+  }
+
+  // Cek apakah tanggal yang dipilih adalah hari libur (Minggu, Sabtu, atau Libur Nasional/Sekolah)
+  $holidayInfo = getHolidayInfo($selectedTanggal, $conn);
+  if ($holidayInfo) {
+    echo json_encode([
+      'success' => false,
+      'is_holiday' => true,
+      'type' => 'warning',
+      'message' => 'Tanggal ' . date('d/m/Y', strtotime($selectedTanggal)) . ' adalah <strong>' . htmlspecialchars($holidayInfo['label']) . '</strong>. Hari libur tidak dianggap masuk dan absensi dikosongkan.'
     ]);
     exit;
   }
@@ -152,7 +164,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $selectedTanggal = $_POST['tanggal'] ?? date('Y-m-d');
   $status = 'hadir';
 
-  if ($token === '') {
+  $holidayInfo = getHolidayInfo($selectedTanggal, $conn);
+  if ($holidayInfo) {
+    $message = 'Tanggal ' . date('d/m/Y', strtotime($selectedTanggal)) . ' adalah <strong>' . htmlspecialchars($holidayInfo['label']) . '</strong>. Hari libur tidak dianggap masuk dan absensi dikosongkan.';
+    $messageType = 'warning';
+  } elseif ($token === '') {
     $message = 'Kode barcode tidak boleh kosong. Silakan scan ulang.';
     $messageType = 'danger';
   } else {
@@ -228,6 +244,8 @@ $stmtRecent = $conn->prepare("SELECT a.*, s.nama, s.nis, s.kelas, s.jurusan
 $stmtRecent->bind_param('s', $selectedTanggal);
 $stmtRecent->execute();
 $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
+
+$selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
 ?>
 <!doctype html>
 <html lang="id">
@@ -237,7 +255,7 @@ $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scan Absensi Barcode</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=1.5" rel="stylesheet">
   <style>
     .scanner-box {
       border: 2px dashed #3b82f6;
@@ -523,16 +541,16 @@ $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
           <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" onclick="closeMobileSidebar(event)" aria-label="Tutup Menu">✕</button>
         </div>
         <nav>
-          <a href="dashboard.php">🏠 Dashboard</a>
-          <a href="siswa.php">👥 Data Siswa</a>
+          <a href="../dashboard.php">🏠 Dashboard</a>
+          <a href="../siswa/index.php">👥 Data Siswa</a>
           <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php" class="active">📷 Scan Absensi</a>
-          <a href="absensi_manual.php">✍️ Absensi Manual</a>
+          <a href="scan.php" class="active">📷 Scan Absensi</a>
+          <a href="manual.php">✍️ Absensi Manual</a>
           <a href="riwayat.php">📜 Riwayat</a>
           <a href="laporan.php">📊 Laporan</a>
           <?php if ($role === 'admin'): ?>
-            <a href="users.php">🔒 Pengguna</a>
-            <a href="holidays_admin.php">📅 Kelola Libur</a>
+            <a href="../users/index.php">🔒 Pengguna</a>
+            <a href="../holidays/index.php">📅 Kelola Libur</a>
           <?php endif; ?>
         </nav>
       </div>
@@ -541,7 +559,7 @@ $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
           <strong><?= htmlspecialchars($_SESSION['username']) ?></strong>
           <div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($role) ?></div>
         </div>
-        <a href="logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
+        <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
       </div>
     </aside>
 
@@ -567,7 +585,7 @@ $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($role ?? $_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
-          <a href="logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
+          <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
       <div class="main-inner">
@@ -602,6 +620,14 @@ $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
 
         <!-- Live Notification / Feedback Area -->
         <div id="liveAlertArea">
+          <?php if (!empty($selectedHoliday)): ?>
+            <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert" style="border-radius:10px">
+              <span style="font-size:18px">📅</span>
+              <div>
+                <strong>Pemberitahuan Hari Libur:</strong> Tanggal <?= date('d/m/Y', strtotime($selectedTanggal)) ?> adalah <strong><?= htmlspecialchars($selectedHoliday['label']) ?></strong>. Sistem absensi pada hari libur dikosongkan dan tidak dianggap masuk.
+              </div>
+            </div>
+          <?php endif; ?>
           <?php if ($message): ?>
             <div class="alert alert-<?= $messageType ?> alert-dismissible fade show" role="alert" style="border-radius:10px">
               <?= $message ?>
@@ -1096,7 +1122,7 @@ $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
         formData.append('barcode_code', cleanToken);
         formData.append('tanggal', selectedTanggal);
 
-        fetch('absensi_barcode.php', {
+        fetch('scan.php', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -1430,7 +1456,7 @@ $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
       }
     });
   </script>
-  <script src="assets/main.js?v=1.4"></script>
+  <script src="../assets/main.js?v=1.4"></script>
 </body>
 
 </html>

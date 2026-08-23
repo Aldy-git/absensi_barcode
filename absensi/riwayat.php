@@ -1,9 +1,9 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 if (empty($_SESSION['user_id'])) {
-  header('Location: login.php');
+  header('Location: ../login.php');
   exit;
 }
 
@@ -56,12 +56,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     $allowedStatus = ['hadir', 'terlambat', 'izin', 'sakit', 'alpa'];
 
+    $holidayInfo = getHolidayInfo($tanggal, $conn);
+
     if ($id <= 0) {
       $message = 'ID absensi tidak valid.';
       $messageType = 'danger';
     } elseif ($tanggal === '') {
       $message = 'Tanggal absensi wajib diisi.';
       $messageType = 'danger';
+    } elseif ($holidayInfo) {
+      $message = 'Tanggal ' . date('d/m/Y', strtotime($tanggal)) . ' adalah ' . htmlspecialchars($holidayInfo['label']) . '. Hari libur tidak dianggap masuk dan absensi dikosongkan.';
+      $messageType = 'warning';
     } elseif (!in_array($status, $allowedStatus, true)) {
       $message = 'Status absensi tidak valid.';
       $messageType = 'danger';
@@ -146,7 +151,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Riwayat Absensi</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=1.4" rel="stylesheet">
 </head>
 
 <body>
@@ -165,16 +170,16 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
           <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" onclick="closeMobileSidebar(event)" aria-label="Tutup Menu">✕</button>
         </div>
         <nav>
-          <a href="dashboard.php">🏠 Dashboard</a>
-          <a href="siswa.php">👥 Data Siswa</a>
+          <a href="../dashboard.php">🏠 Dashboard</a>
+          <a href="../siswa/index.php">👥 Data Siswa</a>
           <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php">📷 Scan Absensi</a>
-          <a href="absensi_manual.php">✍️ Absensi Manual</a>
+          <a href="scan.php">📷 Scan Absensi</a>
+          <a href="manual.php">✍️ Absensi Manual</a>
           <a href="riwayat.php" class="active">📜 Riwayat</a>
           <a href="laporan.php">📊 Laporan</a>
           <?php if ($_SESSION['role'] === 'admin'): ?>
-            <a href="users.php">🔒 Pengguna</a>
-            <a href="holidays_admin.php">📅 Kelola Libur</a>
+            <a href="../users/index.php">🔒 Pengguna</a>
+            <a href="../holidays/index.php">📅 Kelola Libur</a>
           <?php endif; ?>
         </nav>
       </div>
@@ -183,7 +188,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
           <strong><?= htmlspecialchars($_SESSION['username']) ?></strong>
           <div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($_SESSION['role']) ?></div>
         </div>
-        <a href="logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
+        <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
       </div>
     </aside>
 
@@ -209,7 +214,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
-          <a href="logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
+          <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
       <div class="main-inner">
@@ -219,7 +224,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
             <div style="font-size:13px;color:rgba(255,255,255,0.7)">Daftar riwayat kehadiran siswa</div>
           </div>
           <div>
-            <a href="absensi_manual.php" class="btn btn-primary">+ Absensi Manual</a>
+            <a href="manual.php" class="btn btn-primary">+ Absensi Manual</a>
           </div>
         </div>
 
@@ -291,7 +296,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
                             Edit
                           </button>
                           <?php if ($_SESSION['role'] === 'admin'): ?>
-                            <form action="absensi_delete.php" method="post" style="display:inline" onsubmit="return confirm('Hapus data absensi ini?')">
+                            <form action="delete.php" method="post" style="display:inline" onsubmit="return confirm('Hapus data absensi ini?')">
                               <input type="hidden" name="id" value="<?= $a['id'] ?>">
                               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                               <button type="submit" class="btn btn-sm btn-danger">Hapus</button>
@@ -435,7 +440,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
       });
     });
   </script>
-  <script src="assets/main.js?v=1.4"></script>
+  <script src="../assets/main.js?v=1.4"></script>
 </body>
 
 </html>

@@ -1,23 +1,23 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 // Hanya admin yang dapat mengakses
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
 $id = (int)($_GET['id'] ?? ($_POST['id'] ?? 0));
 
 if ($id <= 0) {
-    header('Location: users.php?error=not_found');
+    header('Location: index.php?error=not_found');
     exit;
 }
 
 // Mencegah admin menghapus akunnya sendiri
 if ($id === (int)$_SESSION['user_id']) {
-    header('Location: users.php?error=self_delete');
+    header('Location: index.php?error=self_delete');
     exit;
 }
 
@@ -28,13 +28,13 @@ $stmt->execute();
 $targetUser = $stmt->get_result()->fetch_assoc();
 
 if (!$targetUser) {
-    header('Location: users.php?error=not_found');
+    header('Location: index.php?error=not_found');
     exit;
 }
 
 // Mencegah penghapusan akun yang memiliki role admin
 if ($targetUser['role'] === 'admin') {
-    header('Location: users.php?error=admin_protected');
+    header('Location: index.php?error=admin_protected');
     exit;
 }
 
@@ -42,8 +42,8 @@ if ($targetUser['role'] === 'admin') {
 $del = $conn->prepare("DELETE FROM users WHERE id = ?");
 $del->bind_param('i', $id);
 if ($del->execute() && $del->affected_rows > 0) {
-    header('Location: users.php?msg=deleted');
+    header('Location: index.php?msg=deleted');
 } else {
-    header('Location: users.php?error=failed');
+    header('Location: index.php?error=failed');
 }
 exit;

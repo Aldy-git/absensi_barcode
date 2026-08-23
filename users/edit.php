@@ -1,9 +1,9 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -12,7 +12,7 @@ $message = '';
 $messageType = 'danger';
 
 if ($id <= 0) {
-    header('Location: users.php?error=not_found');
+    header('Location: index.php?error=not_found');
     exit;
 }
 
@@ -23,7 +23,7 @@ $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
 
 if (!$user) {
-    header('Location: users.php?error=not_found');
+    header('Location: index.php?error=not_found');
     exit;
 }
 
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if ($upd->execute()) {
-                    header('Location: users.php?msg=updated');
+                    header('Location: index.php?msg=updated');
                     exit;
                 } else {
                     $message = 'Gagal menyimpan data: ' . $conn->error;
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edit Pengguna</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=1.4" rel="stylesheet">
 </head>
 <body>
   <div class="site-shell">
@@ -91,20 +91,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" onclick="closeMobileSidebar(event)" aria-label="Tutup Menu">✕</button>
         </div>
         <nav>
-          <a href="dashboard.php">🏠 Dashboard</a>
-          <a href="siswa.php">👥 Data Siswa</a>
-          <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php">📷 Scan Absensi</a>
-          <a href="absensi_manual.php">✍️ Absensi Manual</a>
-          <a href="riwayat.php">📜 Riwayat</a>
-          <a href="laporan.php">📊 Laporan</a>
-          <a href="users.php" class="active">🔒 Pengguna</a>
-          <a href="holidays_admin.php">📅 Kelola Libur</a>
+          <a href="../dashboard.php">🏠 Dashboard</a>
+          <a href="../siswa/index.php">👥 Data Siswa</a>
+          <a href="../absensi/barcode.php">🔖 Barcode</a>
+          <a href="../absensi/scan.php">📷 Scan Absensi</a>
+          <a href="../absensi/manual.php">✍️ Absensi Manual</a>
+          <a href="../absensi/riwayat.php">📜 Riwayat</a>
+          <a href="../absensi/laporan.php">📊 Laporan</a>
+          <a href="index.php" class="active">🔒 Pengguna</a>
+          <a href="../holidays/index.php">📅 Kelola Libur</a>
         </nav>
       </div>
       <div class="footer">
         <div style="margin-bottom:10px"><strong><?= htmlspecialchars($_SESSION['username']) ?></strong><div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($_SESSION['role']) ?></div></div>
-        <a href="logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
+        <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
       </div>
     </aside>
 
@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($role ?? $_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
-          <a href="logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
+          <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
       <div class="main-inner">
@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div style="font-size:16px;font-weight:700">Edit Pengguna</div>
             <div style="font-size:13px;color:rgba(255,255,255,0.7)">Perbarui data akun pengguna</div>
           </div>
-          <a href="users.php" class="btn btn-outline-light btn-sm">← Kembali</a>
+          <a href="index.php" class="btn btn-outline-light btn-sm">← Kembali</a>
         </div>
 
         <div style="padding:12px;display:flex;justify-content:center">
@@ -170,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </select>
                 </div>
                 <div style="display:flex;gap:10px;justify-content:flex-end">
-                  <a href="users.php" class="btn btn-outline-secondary">Batal</a>
+                  <a href="index.php" class="btn btn-outline-secondary">Batal</a>
                   <button type="submit" class="btn btn-primary" style="font-weight:600">Simpan Perubahan</button>
                 </div>
               </form>
@@ -181,6 +181,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/main.js?v=1.4"></script>
+  <script src="../assets/main.js?v=1.4"></script>
 </body>
 </html>

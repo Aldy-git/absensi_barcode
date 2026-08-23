@@ -1,9 +1,9 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 if (empty($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -83,7 +83,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Laporan Absensi</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=1.4" rel="stylesheet">
 </head>
 <body>
   <div class="site-shell">
@@ -101,22 +101,22 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
           <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" onclick="closeMobileSidebar(event)" aria-label="Tutup Menu">✕</button>
         </div>
         <nav>
-          <a href="dashboard.php">🏠 Dashboard</a>
-          <a href="siswa.php">👥 Data Siswa</a>
+          <a href="../dashboard.php">🏠 Dashboard</a>
+          <a href="../siswa/index.php">👥 Data Siswa</a>
           <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php">📷 Scan Absensi</a>
-          <a href="absensi_manual.php">✍️ Absensi Manual</a>
+          <a href="scan.php">📷 Scan Absensi</a>
+          <a href="manual.php">✍️ Absensi Manual</a>
           <a href="riwayat.php">📜 Riwayat</a>
           <a href="laporan.php" class="active">📊 Laporan</a>
           <?php if ($_SESSION['role'] === 'admin'): ?>
-            <a href="users.php">🔒 Pengguna</a>
-            <a href="holidays_admin.php">📅 Kelola Libur</a>
+            <a href="../users/index.php">🔒 Pengguna</a>
+            <a href="../holidays/index.php">📅 Kelola Libur</a>
           <?php endif; ?>
         </nav>
       </div>
       <div class="footer">
         <div style="margin-bottom:10px"><strong><?= htmlspecialchars($_SESSION['username']) ?></strong><div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($_SESSION['role']) ?></div></div>
-        <a href="logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
+        <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
       </div>
     </aside>
 
@@ -142,7 +142,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
-          <a href="logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
+          <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
       <div class="main-inner">
@@ -250,7 +250,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
       doc.open();
       doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Print Laporan</title>');
       doc.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">');
-      doc.write('<link rel="stylesheet" href="'+base+'assets/style.css">');
+      doc.write('<link rel="stylesheet" href="'+base+'../assets/style.css">');
       doc.write('</head><body>');
       // clone content and remove interactive controls
       const clone = mainInner.cloneNode(true);
@@ -261,6 +261,6 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
       doc.close();
     }
   </script>
-  <script src="assets/main.js?v=1.4"></script>
+  <script src="../assets/main.js?v=1.4"></script>
 </body>
 </html>

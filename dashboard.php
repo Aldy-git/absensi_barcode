@@ -1,6 +1,6 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/config/config.php';
 
 if (empty($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -8,6 +8,8 @@ if (empty($_SESSION['user_id'])) {
 }
 
 $role = $_SESSION['role'];
+
+$todayHoliday = getHolidayInfo(date('Y-m-d'), $conn);
 
 $totalSiswa = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM siswa"))['total'];
 $hadirHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND status = 'hadir'"))['total'];
@@ -33,6 +35,9 @@ $res = mysqli_query($conn, $sql);
 while ($row = mysqli_fetch_assoc($res)) {
   $t = $row['tanggal']; $s = $row['status']; $c = (int)$row['cnt'];
   if (!isset($hadirData[$t])) continue;
+  // Hari libur tidak dianggap masuk / dikosongkan
+  if (getHolidayInfo($t, $conn)) continue;
+
   if ($s === 'hadir') $hadirData[$t] = $c;
   if ($s === 'terlambat') $terlambatData[$t] = $c;
   if ($s === 'izin') $izinData[$t] = $c;
@@ -55,7 +60,7 @@ $alpa_js = json_encode(array_values($alpaData));
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard Absensi Barcode</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="assets/style.css?v=1.6" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
 </head>
 <body>
@@ -75,15 +80,15 @@ $alpa_js = json_encode(array_values($alpaData));
         </div>
         <nav>
           <a href="dashboard.php" class="active">🏠 Dashboard</a>
-          <a href="siswa.php">👥 Data Siswa</a>
-          <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php">📷 Scan Absensi</a>
-          <a href="absensi_manual.php">✍️ Absensi Manual</a>
-          <a href="riwayat.php">📜 Riwayat</a>
-          <a href="laporan.php">📊 Laporan</a>
+          <a href="siswa/index.php">👥 Data Siswa</a>
+          <a href="absensi/barcode.php">🔖 Barcode</a>
+          <a href="absensi/scan.php">📷 Scan Absensi</a>
+          <a href="absensi/manual.php">✍️ Absensi Manual</a>
+          <a href="absensi/riwayat.php">📜 Riwayat</a>
+          <a href="absensi/laporan.php">📊 Laporan</a>
           <?php if ($role === 'admin'): ?>
-            <a href="users.php">🔒 Pengguna</a>
-            <a href="holidays_admin.php">📅 Kelola Libur</a>
+            <a href="users/index.php">🔒 Pengguna</a>
+            <a href="holidays/index.php">📅 Kelola Libur</a>
           <?php endif; ?>
         </nav>
       </div>
@@ -125,10 +130,24 @@ $alpa_js = json_encode(array_values($alpaData));
             <div style="font-size:28px;font-weight:700;"><?= $totalSiswa ?></div>
           </div>
           <div style="text-align:right;color:rgba(255,255,255,0.85)">
-            <div style="font-size:13px">Absensi hari ini</div>
-            <div style="font-size:20px;font-weight:700"><?= $hadirHariIni ?> siswa</div>
+            <?php if ($todayHoliday): ?>
+              <div style="font-size:13px">Status hari ini</div>
+              <div style="font-size:18px;font-weight:700;color:#fde047"><?= htmlspecialchars($todayHoliday['nama']) ?></div>
+            <?php else: ?>
+              <div style="font-size:13px">Absensi hari ini</div>
+              <div style="font-size:20px;font-weight:700"><?= $hadirHariIni ?> siswa</div>
+            <?php endif; ?>
           </div>
         </div>
+
+        <?php if ($todayHoliday): ?>
+          <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert" style="border-radius:10px;margin-top:12px">
+            <span style="font-size:18px">📅</span>
+            <div>
+              <strong>Pemberitahuan Hari Libur:</strong> Hari ini adalah <strong><?= htmlspecialchars($todayHoliday['label']) ?></strong>. Sistem tidak mencatat kehadiran (absensi dikosongkan).
+            </div>
+          </div>
+        <?php endif; ?>
 
         <div class="stats-grid">
           <div class="stat-card card">
@@ -187,66 +206,128 @@ $alpa_js = json_encode(array_values($alpaData));
 
           <aside class="right-panel">
             <div class="calendar-card card">
-              <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:8px">
-                <div style="font-size:13px;color:var(--muted)">Minggu, <?= date('d F Y') ?></div>
+              <div class="calendar-header-meta">
+                <div class="calendar-header-title">
+                  <span class="calendar-icon">📅</span>
+                  <span>Kalender Akademik</span>
+                </div>
+                <div class="calendar-today-badge">
+                  <?= formatTanggalIndo(date('Y-m-d')) ?>
+                </div>
               </div>
-              <div id="calendar" style="background:transparent;border-radius:8px"></div>
-              <!-- add holiday modal -->
-              <div id="holidayModal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center">
-                <div style="background:#fff;padding:16px;border-radius:8px;width:320px">
-                  <h6>Tambahkan Hari Libur</h6>
+
+              <div id="calendar"></div>
+
+              <!-- Legend / Keterangan Warna Libur -->
+              <div class="calendar-legend-card">
+                <div class="calendar-legend-items">
+                  <div class="legend-item" title="Hari libur resmi nasional">
+                    <span class="legend-dot national"></span>
+                    <span>Libur Nasional</span>
+                  </div>
+                  <div class="legend-item" title="Libur khusus kegiatan sekolah">
+                    <span class="legend-dot school"></span>
+                    <span>Libur Sekolah</span>
+                  </div>
+                  <div class="legend-item" title="Hari Sabtu & Minggu">
+                    <span class="legend-dot weekend"></span>
+                    <span>Akhir Pekan</span>
+                  </div>
+                </div>
+                <?php if ($role === 'admin'): ?>
+                  <a href="holidays/index.php" class="btn-manage-holidays">
+                    ⚙️ Kelola Libur
+                  </a>
+                <?php endif; ?>
+              </div>
+
+              <!-- Modal Tambah Hari Libur (Admin) -->
+              <div id="holidayModal" class="custom-modal-overlay">
+                <div class="custom-modal-card">
+                  <div class="custom-modal-header">
+                    <div class="custom-modal-title">
+                      <span>📅</span> Tambah Libur Sekolah
+                    </div>
+                    <button type="button" class="custom-modal-close" id="holidayCancelBtn" aria-label="Tutup">&times;</button>
+                  </div>
                   <form id="holidayForm">
-                    <div style="margin:8px 0"><label>Nama</label><input id="holidayName" name="nama" class="form-control"></div>
-                    <div style="margin:8px 0"><label>Tanggal</label><input id="holidayDate" name="tanggal" type="date" class="form-control"></div>
-                    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-                      <button type="button" id="holidayCancel" class="btn btn-outline-secondary">Batal</button>
-                      <button type="submit" class="btn btn-primary">Simpan</button>
+                    <div class="custom-modal-body">
+                      <div class="mb-3 text-start">
+                        <label class="form-label" for="holidayDate">Tanggal Libur</label>
+                        <input id="holidayDate" name="tanggal" type="date" class="form-control" required>
+                      </div>
+                      <div class="mb-2 text-start">
+                        <label class="form-label" for="holidayName">Nama / Keterangan Libur</label>
+                        <input id="holidayName" name="nama" type="text" class="form-control" placeholder="Contoh: Libur Semester Ganjil" required>
+                      </div>
+                    </div>
+                    <div class="custom-modal-footer">
+                      <button type="button" id="holidayCancel" class="btn btn-light border btn-sm">Batal</button>
+                      <button type="submit" class="btn btn-primary btn-sm">Simpan Libur</button>
                     </div>
                   </form>
                 </div>
-                </div>
+              </div>
 
-                <?php
-                  // fetch DB holidays for this month
-                  $res = $conn->query("SELECT tanggal, nama, type FROM holidays WHERE MONTH(tanggal)=MONTH(CURDATE()) AND YEAR(tanggal)=YEAR(CURDATE()) ORDER BY tanggal");
-                  $dbH = [];
+              <?php
+                // Sync national holidays if needed so list is always populated
+                syncNationalHolidays($conn);
+
+                // Fetch DB holidays for this month (excluding weekends from DB list)
+                $res = $conn->query("SELECT tanggal, nama, type FROM holidays WHERE MONTH(tanggal)=MONTH(CURDATE()) AND YEAR(tanggal)=YEAR(CURDATE()) ORDER BY tanggal");
+                $dbH = [];
+                if ($res) {
                   while ($r = mysqli_fetch_assoc($res)) { $dbH[$r['tanggal']] = $r; }
-                  // build month holidays: include DB holidays only (exclude weekends)
-                  $first = date('Y-m-01'); $last = date('Y-m-t');
-                  $period = new DatePeriod(new DateTime($first), new DateInterval('P1D'), (new DateTime($last))->modify('+1 day'));
-                  $monthHolidays = [];
-                  foreach ($period as $d) {
-                    $ds = $d->format('Y-m-d');
-                    // include DB holiday entries only; skip weekend-only items (Sat/Sun)
-                    if (isset($dbH[$ds])) {
-                      $w = (int)$d->format('w');
-                      if ($w === 0 || $w === 6) continue; // skip Sundays/Saturdays in the month list
-                      $monthHolidays[] = $dbH[$ds];
-                    }
+                }
+
+                $first = date('Y-m-01'); $last = date('Y-m-t');
+                $period = new DatePeriod(new DateTime($first), new DateInterval('P1D'), (new DateTime($last))->modify('+1 day'));
+                $monthHolidays = [];
+                foreach ($period as $d) {
+                  $ds = $d->format('Y-m-d');
+                  if (isset($dbH[$ds])) {
+                    $w = (int)$d->format('w');
+                    if ($w === 0 || $w === 6) continue; // skip Sundays/Saturdays
+                    $monthHolidays[] = $dbH[$ds];
                   }
-                ?>
+                }
 
-                <div class="calendar-legend" style="display:flex;gap:12px;align-items:center;margin-top:10px">
-                  <div class="legend-item"><span class="legend-dot national"></span><div style="margin-left:6px;font-size:13px;color:var(--muted)">Libur Nasional</div></div>
-                  <div class="legend-item"><span class="legend-dot school"></span><div style="margin-left:6px;font-size:13px;color:var(--muted)">Libur Sekolah</div></div>
-                  <a href="holidays_admin.php" class="manage-holidays">Kelola Libur Sekolah</a>
+                $currentMonthName = getIndonesianMonthName((int)date('n')) . ' ' . date('Y');
+              ?>
+
+              <div class="month-holidays">
+                <div class="month-holidays-header">
+                  <h6>Hari Libur Bulan Ini</h6>
+                  <span class="badge-month-pill"><?= $currentMonthName ?></span>
                 </div>
-
-                <div class="month-holidays">
-                  <h6>Hari libur bulan ini</h6>
-                  <?php if (empty($monthHolidays)): ?>
-                    <div style="color:var(--muted)">Tidak ada hari libur bulan ini.</div>
-                  <?php else: foreach ($monthHolidays as $h): $dnum = date('j', strtotime($h['tanggal']));
+                <?php if (empty($monthHolidays)): ?>
+                  <div class="empty-holidays-box">
+                    <span class="empty-holidays-icon">🏖️</span>
+                    <span>Tidak ada hari libur di luar akhir pekan bulan ini.</span>
+                  </div>
+                <?php else: ?>
+                  <div class="holidays-scroll-list">
+                    <?php foreach ($monthHolidays as $h):
+                      $dnum = date('j', strtotime($h['tanggal']));
                       $ttype = ($h['type'] === 'national') ? 'national' : 'school';
-                      $tlabel = ($ttype === 'national') ? 'Libur' : 'Sekolah';
-                  ?>
-                    <div class="holiday-item">
-                      <div class="holiday-date-pill"><?= $dnum ?></div>
-                      <div class="holiday-title"><?= htmlspecialchars($h['nama']) ?><div style="font-size:12px;color:var(--muted)"><?= date('l', strtotime($h['tanggal'])) ?></div></div>
-                      <div class="holiday-badge <?= $ttype ?>"><?= $tlabel ?></div>
-                    </div>
-                  <?php endforeach; endif; ?>
-                </div>
+                      $tlabel = ($ttype === 'national') ? 'Nasional' : 'Sekolah';
+                      $fullDateIndo = formatTanggalIndo($h['tanggal'], true);
+                    ?>
+                      <div class="holiday-item <?= $ttype ?>">
+                        <div class="holiday-date-pill <?= $ttype ?>">
+                          <span class="date-num"><?= $dnum ?></span>
+                          <span class="date-month"><?= substr(getIndonesianMonthName((int)date('n', strtotime($h['tanggal']))), 0, 3) ?></span>
+                        </div>
+                        <div class="holiday-title">
+                          <div class="holiday-main-name" title="<?= htmlspecialchars($h['nama']) ?>"><?= htmlspecialchars($h['nama']) ?></div>
+                          <div class="holiday-sub-date"><?= $fullDateIndo ?></div>
+                        </div>
+                        <div class="holiday-badge <?= $ttype ?>"><?= $tlabel ?></div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
             </div>
 
             <div class="chart-card card">
@@ -302,89 +383,147 @@ $alpa_js = json_encode(array_values($alpaData));
       const calendarEl = document.getElementById('calendar');
       if (!calendarEl) return;
       const isAdmin = <?= ($role === 'admin') ? 'true' : 'false' ?>;
+
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
-        height: 250,
         locale: 'id',
-        headerToolbar: { left: 'prev,next', center: 'title', right: '' },
-        dayMaxEventRows: 3,
-        selectable: false,
+        height: 'auto',
+        contentHeight: 'auto',
+        aspectRatio: 1.18,
+        headerToolbar: {
+          left: 'prev,next',
+          center: 'title',
+          right: 'today'
+        },
+        buttonText: {
+          today: 'Hari Ini'
+        },
+        fixedWeekCount: false,
+        showNonCurrentDates: true,
+        dayMaxEvents: 2,
         eventSources: [
-          { url: 'holidays.php' },
+          { url: 'includes/holidays.php' },
           function(fetchInfo, successCallback, failureCallback) {
-            // generate Saturday events as school holidays (auto)
             try {
               const events = [];
               const cur = new Date(fetchInfo.start);
               const end = new Date(fetchInfo.end);
               function localDateString(d) {
                 const y = d.getFullYear();
-                const m = String(d.getMonth() + 1).padStart(2,'0');
-                const day = String(d.getDate()).padStart(2,'0');
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
                 return y + '-' + m + '-' + day;
               }
               while (cur <= end) {
                 if (cur.getDay() === 6) { // Saturday
-                  // mark as weekend event (no purple dot)
                   const dstr = localDateString(cur);
-                  events.push({ id: 'sat-'+dstr, start: dstr, title: 'Akhir Pekan', allDay: true, extendedProps: { type: 'weekend', auto: true } });
+                  events.push({
+                    id: 'sat-' + dstr,
+                    start: dstr,
+                    title: 'Akhir Pekan (Sabtu)',
+                    allDay: true,
+                    extendedProps: { type: 'weekend', auto: true }
+                  });
                 }
                 cur.setDate(cur.getDate() + 1);
               }
               successCallback(events);
-            } catch (e) { failureCallback(e); }
+            } catch (e) {
+              failureCallback(e);
+            }
           }
         ],
         dateClick: function(info) {
-          if (!isAdmin) { alert('Hanya admin yang dapat menambah hari libur.'); return; }
-          document.getElementById('holidayModal').style.display = 'flex';
+          if (!isAdmin) return;
+          const modal = document.getElementById('holidayModal');
+          if (!modal) return;
           document.getElementById('holidayDate').value = info.dateStr;
-          document.getElementById('holidayName').focus();
+          document.getElementById('holidayName').value = '';
+          modal.classList.add('show');
+          setTimeout(() => {
+            document.getElementById('holidayName').focus();
+          }, 100);
         },
         eventClick: function(info) {
           const ev = info.event;
-          const type = ev.extendedProps.type || '';
-          // auto-generated weekend events are informational
-          if (ev.extendedProps && ev.extendedProps.auto && type === 'weekend') { alert('Hari akhir pekan.'); return; }
-          // auto-generated events (like other auto holidays) are not deletable
-          if (ev.extendedProps && ev.extendedProps.auto) { alert('Libur ini otomatis dan tidak dapat dihapus.'); return; }
-          if (!isAdmin) return;
-          if (type === 'national') { alert('Hari nasional tidak dapat dihapus.'); return; }
-          if (confirm('Hapus hari libur "' + ev.title + '" pada ' + ev.startStr + ' ?')) {
-            const form = new FormData(); form.append('action','delete'); form.append('id', ev.id);
-            fetch('holidays.php',{method:'POST',body:form}).then(r=>r.json()).then(j=>{ if (j.success) info.event.remove(); else alert('Gagal menghapus'); }).catch(()=>alert('Gagal menghapus'));
+          const type = ev.extendedProps?.type || '';
+          if (ev.extendedProps?.auto && type === 'weekend') {
+            return;
+          }
+          if (type === 'national') {
+            alert('🎉 ' + ev.title + '\n📅 ' + ev.startStr + ' (Libur Nasional)');
+            return;
+          }
+          if (isAdmin) {
+            if (confirm('Hapus hari libur "' + ev.title + '" (' + ev.startStr + ')?')) {
+              const form = new FormData();
+              form.append('action', 'delete');
+              form.append('id', ev.id);
+              fetch('includes/holidays.php', { method: 'POST', body: form })
+                .then(r => r.json())
+                .then(j => {
+                  if (j.success) {
+                    ev.remove();
+                    window.location.reload();
+                  } else {
+                    alert('Gagal menghapus libur');
+                  }
+                })
+                .catch(() => alert('Gagal menghapus libur'));
+            }
+          } else {
+            alert('📌 ' + ev.title + '\n📅 ' + ev.startStr + ' (Libur Sekolah)');
           }
         },
         eventContent: function(arg) {
-          const type = arg.event.extendedProps.type || 'school';
-          if (type === 'weekend') return { html: '' }; // no dot for weekend
-          return { html: '<span class="fc-event-dot ' + type + '"></span>' };
-        },
-        eventDidMount: function(info) {
-          // keep container minimal; dot is rendered by eventContent. No extra text.
-          try {
-            info.el.style.padding = '2px 0';
-            info.el.style.background = 'transparent';
-            info.el.style.border = '0';
-          } catch(e){}
+          const type = arg.event.extendedProps?.type || 'school';
+          if (type === 'weekend') return { html: '' };
+          const title = arg.event.title ? arg.event.title.replace(/"/g, '&quot;') : '';
+          return {
+            html: '<span class="fc-event-dot ' + type + '" title="' + title + '"></span>'
+          };
         }
       });
+
       calendar.render();
 
-      // legend is rendered server-side
+      // Modal controls
+      const modal = document.getElementById('holidayModal');
+      const closeBtn = document.getElementById('holidayCancelBtn');
+      const cancelBtn = document.getElementById('holidayCancel');
+      function hideModal() {
+        if (modal) modal.classList.remove('show');
+      }
+      if (closeBtn) closeBtn.addEventListener('click', hideModal);
+      if (cancelBtn) cancelBtn.addEventListener('click', hideModal);
+      if (modal) {
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) hideModal();
+        });
+      }
 
-      // modal controls
-      document.getElementById('holidayCancel').addEventListener('click', function(){ document.getElementById('holidayModal').style.display='none'; });
-      document.getElementById('holidayForm').addEventListener('submit', function(e){
-        e.preventDefault();
-        const form = new FormData(e.target);
-        form.append('action','add');
-        fetch('holidays.php',{method:'POST',body:form}).then(r=>r.json()).then(js=>{
-          if (js.success) { calendar.refetchEvents(); document.getElementById('holidayModal').style.display='none'; }
-          else alert('Gagal menambahkan libur');
-        }).catch(()=>alert('Gagal menambahkan libur'));
-      });
+      const holidayForm = document.getElementById('holidayForm');
+      if (holidayForm) {
+        holidayForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          const form = new FormData(e.target);
+          form.append('action', 'add');
+          fetch('includes/holidays.php', { method: 'POST', body: form })
+            .then(r => r.json())
+            .then(js => {
+              if (js.success) {
+                hideModal();
+                calendar.refetchEvents();
+                window.location.reload();
+              } else {
+                alert(js.error || 'Gagal menambahkan libur');
+              }
+            })
+            .catch(() => alert('Gagal menambahkan libur'));
+        });
+      }
     });
+
   </script>
   <script src="assets/main.js?v=1.4"></script>
 </body>

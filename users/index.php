@@ -1,9 +1,9 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-  header('Location: login.php');
+  header('Location: ../login.php');
   exit;
 }
 
@@ -78,7 +78,7 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>User Management</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=1.4" rel="stylesheet">
 </head>
 
 <body>
@@ -97,22 +97,22 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
           <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" onclick="closeMobileSidebar(event)" aria-label="Tutup Menu">✕</button>
         </div>
         <nav>
-          <a href="dashboard.php">🏠 Dashboard</a>
-          <a href="siswa.php">👥 Data Siswa</a>
-          <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php">📷 Scan Absensi</a>
-          <a href="absensi_manual.php">✍️ Absensi Manual</a>
-          <a href="riwayat.php">📜 Riwayat</a>
-          <a href="laporan.php">📊 Laporan</a>
-          <a href="users.php" class="active">🔒 Pengguna</a>
-          <a href="holidays_admin.php">📅 Kelola Libur</a>
+          <a href="../dashboard.php">🏠 Dashboard</a>
+          <a href="../siswa/index.php">👥 Data Siswa</a>
+          <a href="../absensi/barcode.php">🔖 Barcode</a>
+          <a href="../absensi/scan.php">📷 Scan Absensi</a>
+          <a href="../absensi/manual.php">✍️ Absensi Manual</a>
+          <a href="../absensi/riwayat.php">📜 Riwayat</a>
+          <a href="../absensi/laporan.php">📊 Laporan</a>
+          <a href="index.php" class="active">🔒 Pengguna</a>
+          <a href="../holidays/index.php">📅 Kelola Libur</a>
         </nav>
       </div>
       <div class="footer">
         <div style="margin-bottom:10px"><strong><?= htmlspecialchars($_SESSION['username']) ?></strong>
           <div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($_SESSION['role']) ?></div>
         </div>
-        <a href="logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
+        <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
       </div>
     </aside>
 
@@ -138,7 +138,7 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($role ?? $_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
-          <a href="logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
+          <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
       <div class="main-inner">
@@ -183,13 +183,13 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
                         </span>
                       </td>
                       <td>
-                        <a href="users_edit.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-secondary">Edit</a>
+                        <a href="edit.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-secondary">Edit</a>
                         <?php if ($isAdmin): ?>
                           <button class="btn btn-sm btn-secondary opacity-50" disabled title="<?= $isSelf ? 'Tidak dapat menghapus akun sendiri' : 'Akun Admin dilindungi dan tidak dapat dihapus' ?>" style="cursor:not-allowed">
                             Hapus
                           </button>
                         <?php else: ?>
-                          <a href="users_delete.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Apakah Anda yakin ingin menghapus pengguna <?= htmlspecialchars($u['username']) ?>?')">Hapus</a>
+                          <a href="delete.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Apakah Anda yakin ingin menghapus pengguna <?= htmlspecialchars($u['username']) ?>?')">Hapus</a>
                         <?php endif; ?>
                       </td>
                     </tr>
@@ -224,7 +224,7 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/main.js?v=1.4"></script>
+  <script src="../assets/main.js?v=1.4"></script>
 </body>
 
 </html>

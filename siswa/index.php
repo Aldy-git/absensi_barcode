@@ -1,9 +1,9 @@
 <?php
 session_start();
-require 'config.php';
+require_once __DIR__ . '/../config/config.php';
 
 if (empty($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -58,7 +58,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Data Siswa</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=1.4" rel="stylesheet">
 </head>
 <body>
   <div class="site-shell">
@@ -76,22 +76,22 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
           <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" onclick="closeMobileSidebar(event)" aria-label="Tutup Menu">✕</button>
         </div>
         <nav>
-          <a href="dashboard.php">🏠 Dashboard</a>
-          <a href="siswa.php" class="active">👥 Data Siswa</a>
-          <a href="barcode.php">🔖 Barcode</a>
-          <a href="absensi_barcode.php">📷 Scan Absensi</a>
-          <a href="absensi_manual.php">✍️ Absensi Manual</a>
-          <a href="riwayat.php">📜 Riwayat</a>
-          <a href="laporan.php">📊 Laporan</a>
+          <a href="../dashboard.php">🏠 Dashboard</a>
+          <a href="index.php" class="active">👥 Data Siswa</a>
+          <a href="../absensi/barcode.php">🔖 Barcode</a>
+          <a href="../absensi/scan.php">📷 Scan Absensi</a>
+          <a href="../absensi/manual.php">✍️ Absensi Manual</a>
+          <a href="../absensi/riwayat.php">📜 Riwayat</a>
+          <a href="../absensi/laporan.php">📊 Laporan</a>
           <?php if ($role === 'admin'): ?>
-            <a href="users.php">🔒 Pengguna</a>
-            <a href="holidays_admin.php">📅 Kelola Libur</a>
+            <a href="../users/index.php">🔒 Pengguna</a>
+            <a href="../holidays/index.php">📅 Kelola Libur</a>
           <?php endif; ?>
         </nav>
       </div>
       <div class="footer">
         <div style="margin-bottom:10px"><strong><?= htmlspecialchars($_SESSION['username']) ?></strong><div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($role) ?></div></div>
-        <a href="logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
+        <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
       </div>
     </aside>
 
@@ -117,7 +117,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($role ?? $_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
-          <a href="logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
+          <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
       <div class="main-inner">
@@ -127,7 +127,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
             <div style="font-size:13px;color:rgba(255,255,255,0.7)">Kelola daftar siswa</div>
           </div>
           <div>
-            <a href="siswa_form.php?mode=add" class="btn btn-primary">+ Tambah Siswa</a>
+            <a href="form.php?mode=add" class="btn btn-primary">+ Tambah Siswa</a>
           </div>
         </div>
 
@@ -147,7 +147,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
               </select>
             </div>
             <div class="col-md-1"><button class="btn btn-primary w-100">Filter</button></div>
-            <div class="col-md-1"><a href="siswa.php" class="btn btn-outline-secondary w-100">Reset</a></div>
+            <div class="col-md-1"><a href="index.php" class="btn btn-outline-secondary w-100">Reset</a></div>
           </form>
 
           <div class="card">
@@ -168,8 +168,8 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                       <td><?= htmlspecialchars($s['jenis_kelamin']) ?></td>
                       <td><span class="tag <?= $s['status'] === 'Aktif' ? 'hadir' : '' ?>"><?= htmlspecialchars($s['status']) ?></span></td>
                       <td>
-                        <a href="siswa_form.php?mode=edit&id=<?= $s['id'] ?>" class="btn btn-sm btn-primary">Edit</a>
-                        <a href="siswa_delete.php?id=<?= $s['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Hapus siswa ini?')">Hapus</a>
+                        <a href="form.php?mode=edit&id=<?= $s['id'] ?>" class="btn btn-sm btn-primary">Edit</a>
+                        <a href="delete.php?id=<?= $s['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Hapus siswa ini?')">Hapus</a>
                       </td>
                     </tr>
                   <?php endforeach; ?>
@@ -182,6 +182,6 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
       </div>
     </main>
   </div>
-  <script src="assets/main.js?v=1.4"></script>
+  <script src="../assets/main.js?v=1.4"></script>
 </body>
 </html>
