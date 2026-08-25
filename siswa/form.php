@@ -18,6 +18,9 @@ if ($mode === 'edit' && $id > 0) {
     $siswa = $stmt->get_result()->fetch_assoc();
 }
 
+$kelasList = $conn->query("SELECT DISTINCT kelas FROM siswa WHERE kelas != '' ORDER BY kelas")->fetch_all(MYSQLI_ASSOC);
+$jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa WHERE jurusan != '' ORDER BY jurusan")->fetch_all(MYSQLI_ASSOC);
+
 function generateEan13($nis, $id = 0) {
     $num = preg_replace('/\D/', '', $nis);
     if (empty($num)) {
@@ -39,21 +42,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $kelas = trim($_POST['kelas'] ?? '');
     $jurusan = trim($_POST['jurusan'] ?? '');
     $jenis_kelamin = trim($_POST['jenis_kelamin'] ?? 'L');
+    $shift = trim($_POST['shift'] ?? 'pagi');
+    if ($shift !== 'siang') $shift = 'pagi';
     $status = trim($_POST['status'] ?? 'aktif');
-    $barcode_code = trim($_POST['barcode_code'] ?? '');
-
-    if ($barcode_code === '') {
-        $barcode_code = generateEan13($nis, $id);
-    }
+    $barcode_code = generateEan13($nis, $id);
 
     if ($id > 0) {
-        $stmt = $conn->prepare("UPDATE siswa SET nis=?, nama=?, kelas=?, jurusan=?, jenis_kelamin=?, barcode_code=?, status=? WHERE id=?" );
-        $stmt->bind_param('sssssssi', $nis, $nama, $kelas, $jurusan, $jenis_kelamin, $barcode_code, $status, $id);
+        $stmt = $conn->prepare("UPDATE siswa SET nis=?, nama=?, kelas=?, jurusan=?, jenis_kelamin=?, shift=?, barcode_code=?, status=? WHERE id=?");
+        $stmt->bind_param('ssssssssi', $nis, $nama, $kelas, $jurusan, $jenis_kelamin, $shift, $barcode_code, $status, $id);
         $stmt->execute();
         $message = 'Data siswa berhasil diubah.';
     } else {
-        $stmt = $conn->prepare("INSERT INTO siswa (nis, nama, kelas, jurusan, jenis_kelamin, barcode_code, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param('sssssss', $nis, $nama, $kelas, $jurusan, $jenis_kelamin, $barcode_code, $status);
+        $stmt = $conn->prepare("INSERT INTO siswa (nis, nama, kelas, jurusan, jenis_kelamin, shift, barcode_code, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param('ssssssss', $nis, $nama, $kelas, $jurusan, $jenis_kelamin, $shift, $barcode_code, $status);
         $stmt->execute();
         $message = 'Data siswa berhasil ditambahkan.';
     }
@@ -137,8 +138,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </main>
   </div>
 
-  <div id="siswaModal" style="display:flex;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(2,6,23,0.7);align-items:center;justify-content:center;z-index:9999">
-    <div class="modal-card card" style="width:420px;padding:20px">
+  <div id="siswaModal" class="standalone-modal-overlay" style="display:flex;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(2,6,23,0.65);align-items:center;justify-content:center;z-index:9999">
+    <div class="modal-card card standalone-modal-card" style="width:460px;max-width:95%;padding:22px;border-radius:14px;box-shadow:0 25px 50px rgba(0,0,0,0.25)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div style="font-weight:700"><?= $mode === 'edit' ? 'Edit Siswa' : 'Tambah Siswa' ?></div>
         <a href="index.php" style="color:var(--muted)">✕</a>
@@ -148,12 +149,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="hidden" name="id" value="<?= isset($siswa['id']) ? $siswa['id'] : 0 ?>">
         <div style="margin-bottom:8px"><label>NIS</label><input type="text" name="nis" class="form-control" value="<?= htmlspecialchars($siswa['nis'] ?? '') ?>" required></div>
         <div style="margin-bottom:8px"><label>Nama Lengkap</label><input type="text" name="nama" class="form-control" value="<?= htmlspecialchars($siswa['nama'] ?? '') ?>" required></div>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <div style="flex:1"><label>Kelas</label><input type="text" name="kelas" class="form-control" value="<?= htmlspecialchars($siswa['kelas'] ?? '') ?>" required></div>
-          <div style="flex:1"><label>Jurusan</label><input type="text" name="jurusan" class="form-control" value="<?= htmlspecialchars($siswa['jurusan'] ?? '') ?>" required></div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-6">
+            <label class="form-label" style="font-weight:600;font-size:13px">Kelas</label>
+            <select name="kelas" class="form-select" required>
+              <option value="">Pilih Kelas</option>
+              <?php
+                $selectedKelas = $siswa['kelas'] ?? '';
+                $kelasFound = false;
+                foreach ($kelasList as $k):
+                  $isSel = ($selectedKelas === $k['kelas']);
+                  if ($isSel) $kelasFound = true;
+              ?>
+                <option value="<?= htmlspecialchars($k['kelas']) ?>" <?= $isSel ? 'selected' : '' ?>><?= htmlspecialchars($k['kelas']) ?></option>
+              <?php endforeach; ?>
+              <?php if (!empty($selectedKelas) && !$kelasFound): ?>
+                <option value="<?= htmlspecialchars($selectedKelas) ?>" selected><?= htmlspecialchars($selectedKelas) ?></option>
+              <?php endif; ?>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" style="font-weight:600;font-size:13px">Jurusan</label>
+            <select name="jurusan" class="form-select" required>
+              <option value="">Pilih Jurusan</option>
+              <?php
+                $selectedJurusan = $siswa['jurusan'] ?? '';
+                $jurusanFound = false;
+                foreach ($jurusanList as $j):
+                  $isSelJ = ($selectedJurusan === $j['jurusan']);
+                  if ($isSelJ) $jurusanFound = true;
+              ?>
+                <option value="<?= htmlspecialchars($j['jurusan']) ?>" <?= $isSelJ ? 'selected' : '' ?>><?= htmlspecialchars($j['jurusan']) ?></option>
+              <?php endforeach; ?>
+              <?php if (!empty($selectedJurusan) && !$jurusanFound): ?>
+                <option value="<?= htmlspecialchars($selectedJurusan) ?>" selected><?= htmlspecialchars($selectedJurusan) ?></option>
+              <?php endif; ?>
+            </select>
+          </div>
         </div>
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
           <div><label>Jenis Kelamin</label><div><label style="margin-right:8px"><input type="radio" name="jenis_kelamin" value="L" <?= ($siswa['jenis_kelamin'] ?? 'L') === 'L' ? 'checked' : '' ?>> Laki-laki</label><label><input type="radio" name="jenis_kelamin" value="P" <?= ($siswa['jenis_kelamin'] ?? 'L') === 'P' ? 'checked' : '' ?>> Perempuan</label></div></div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-weight:600;display:block;margin-bottom:4px">Shift Absensi Siswa</label>
+          <div style="display:flex;gap:12px">
+            <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+              <input type="radio" name="shift" value="pagi" <?= ($siswa['shift'] ?? 'pagi') === 'pagi' ? 'checked' : '' ?> style="margin-right:6px">
+              <strong>🌅 Shift Pagi</strong>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Masuk 07.00 | Pulang 12.00 (Jum'at 10.00)</div>
+            </label>
+            <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+              <input type="radio" name="shift" value="siang" <?= ($siswa['shift'] ?? 'pagi') === 'siang' ? 'checked' : '' ?> style="margin-right:6px">
+              <strong>☀️ Shift Siang</strong>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Masuk 12.30 / 13.00 | Pulang 17.00</div>
+            </label>
+          </div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
           <a href="index.php" class="btn btn-outline-secondary">Batal</a>

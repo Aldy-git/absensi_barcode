@@ -11,8 +11,9 @@ $from = $_GET['from'] ?? '';
 $to = $_GET['to'] ?? '';
 $kelas = $_GET['kelas'] ?? '';
 $jurusan = $_GET['jurusan'] ?? '';
+$shift = $_GET['shift'] ?? '';
 
-$sql = "SELECT s.nis, s.nama, s.kelas, s.jurusan,
+$sql = "SELECT s.nis, s.nama, s.kelas, s.jurusan, s.shift,
         SUM(CASE WHEN a.status='hadir' THEN 1 ELSE 0 END) AS hadir,
         SUM(CASE WHEN a.status='terlambat' THEN 1 ELSE 0 END) AS terlambat,
         SUM(CASE WHEN a.status='izin' THEN 1 ELSE 0 END) AS izin,
@@ -24,6 +25,7 @@ if ($from !== '') { $where[] = "a.tanggal >= '$from'"; }
 if ($to !== '') { $where[] = "a.tanggal <= '$to'"; }
 if ($kelas !== '') { $where[] = "s.kelas = '$kelas'"; }
 if ($jurusan !== '') { $where[] = "s.jurusan = '$jurusan'"; }
+if ($shift !== '') { $where[] = "s.shift = '" . mysqli_real_escape_string($conn, $shift) . "'"; }
 if (!empty($where)) { $sql .= ' WHERE ' . implode(' AND ', $where); }
 $sql .= " GROUP BY s.id ORDER BY s.nama";
 $result = $conn->query($sql);
@@ -34,10 +36,11 @@ if (isset($_GET['export']) && $_GET['export'] == '1') {
   header('Content-Type: text/csv; charset=utf-8');
   header('Content-Disposition: attachment; filename=laporan_absensi.csv');
   $out = fopen('php://output', 'w');
-  fputcsv($out, ['NIS','Nama','Kelas','Jurusan','Hadir','Terlambat','Izin','Sakit','Alpa','Total']);
+  fputcsv($out, ['NIS','Nama','Kelas','Jurusan','Shift','Hadir','Terlambat','Izin','Sakit','Alpa','Total']);
   foreach ($laporan as $r) {
     $total = (int)$r['hadir'] + (int)$r['terlambat'] + (int)$r['izin'] + (int)$r['sakit'] + (int)$r['alpa'];
-    fputcsv($out, [ $r['nis'] ?? '', $r['nama'], $r['kelas'], $r['jurusan'], $r['hadir'], $r['terlambat'], $r['izin'], $r['sakit'], $r['alpa'], $total ]);
+    $sLabel = ($r['shift'] ?? 'pagi') === 'siang' ? 'Shift Siang' : 'Shift Pagi';
+    fputcsv($out, [ $r['nis'] ?? '', $r['nama'], $r['kelas'], $r['jurusan'], $sLabel, $r['hadir'], $r['terlambat'], $r['izin'], $r['sakit'], $r['alpa'], $total ]);
   }
   fclose($out);
   exit;
@@ -84,6 +87,139 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
   <title>Laporan Absensi</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="../assets/style.css?v=1.4" rel="stylesheet">
+  <style>
+    /* ========================================================
+       STATISTIC CARDS LAPORAN - WARNA JELAS & KONTRAS TINGGI
+       ======================================================== */
+    .laporan-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .report-stat-card {
+      padding: 16px 18px;
+      border-radius: 14px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+    }
+
+    .report-stat-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    }
+
+    .report-stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .report-stat-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .report-stat-icon {
+      font-size: 18px;
+      opacity: 0.9;
+    }
+
+    .report-stat-value {
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .report-stat-sub {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.85;
+    }
+
+    /* 1. HADIR - Emerald Vibrant */
+    .stat-card-hadir {
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+      border: 1.5px solid #86efac;
+    }
+    .stat-card-hadir .report-stat-title { color: #166534; }
+    .stat-card-hadir .report-stat-value { color: #15803d; }
+    .stat-card-hadir .report-stat-sub   { color: #14532d; }
+
+    /* 2. TERLAMBAT - Amber / Orange */
+    .stat-card-terlambat {
+      background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+      border: 1.5px solid #fcd34d;
+    }
+    .stat-card-terlambat .report-stat-title { color: #92400e; }
+    .stat-card-terlambat .report-stat-value { color: #b45309; }
+    .stat-card-terlambat .report-stat-sub   { color: #78350f; }
+
+    /* 3. IZIN - Cyan / Teal Vibrant (Sangat Jelas) */
+    .stat-card-izin {
+      background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+      border: 1.5px solid #67e8f9;
+    }
+    .stat-card-izin .report-stat-title { color: #155e75; }
+    .stat-card-izin .report-stat-value { color: #0891b2; }
+    .stat-card-izin .report-stat-sub   { color: #164e63; }
+
+    /* 4. SAKIT - Purple / Violet Vibrant (Sangat Jelas) */
+    .stat-card-sakit {
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+      border: 1.5px solid #c4b5fd;
+    }
+    .stat-card-sakit .report-stat-title { color: #5b21b6; }
+    .stat-card-sakit .report-stat-value { color: #7c3aed; }
+    .stat-card-sakit .report-stat-sub   { color: #4c1d95; }
+
+    /* 5. ALPA - Ruby Red Vibrant (Sangat Jelas & Tegas) */
+    .stat-card-alpa {
+      background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+      border: 1.5px solid #fca5a5;
+    }
+    .stat-card-alpa .report-stat-title { color: #991b1b; }
+    .stat-card-alpa .report-stat-value { color: #dc2626; }
+    .stat-card-alpa .report-stat-sub   { color: #7f1d1d; }
+
+    /* Responsive Filter Controls */
+    .filter-card {
+      background: #ffffff;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 14px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    }
+    
+    .report-btn-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 768px) {
+      .laporan-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 576px) {
+      .report-btn-group {
+        width: 100%;
+      }
+      .report-btn-group button,
+      .report-btn-group a {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="site-shell">
@@ -153,40 +289,113 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
           </div>
         </div>
 
-        <div class="card" style="padding:16px;margin-top:12px">
-          <form method="get" class="row g-2 align-items-center">
-            <div class="col-md-2"><label class="form-label" style="font-size:13px">Dari</label><input type="date" name="from" class="form-control" value="<?= htmlspecialchars($from) ?>"></div>
-            <div class="col-md-2"><label class="form-label" style="font-size:13px">Sampai</label><input type="date" name="to" class="form-control" value="<?= htmlspecialchars($to) ?>"></div>
-            <div class="col-md-2"><label class="form-label" style="font-size:13px">Kelas</label><select name="kelas" class="form-select"><option value="">Semua</option><?php foreach ($kelasList as $k): ?><option value="<?= htmlspecialchars($k['kelas']) ?>" <?= $kelas === $k['kelas'] ? 'selected' : '' ?>><?= htmlspecialchars($k['kelas']) ?></option><?php endforeach; ?></select></div>
-            <div class="col-md-2"><label class="form-label" style="font-size:13px">Jurusan</label><select name="jurusan" class="form-select"><option value="">Semua</option><?php foreach ($jurusanList as $j): ?><option value="<?= htmlspecialchars($j['jurusan']) ?>" <?= $jurusan === $j['jurusan'] ? 'selected' : '' ?>><?= htmlspecialchars($j['jurusan']) ?></option><?php endforeach; ?></select></div>
-            <div class="col-md-2" style="display:flex;gap:8px">
-              <button type="submit" name="export" value="1" class="btn btn-success" style="align-self:end">Export CSV</button>
-              <button type="button" class="btn btn-outline-secondary" onclick="printReport()" style="align-self:end">Print</button>
+        <div class="card filter-card" style="padding:18px;margin-top:14px;border-radius:14px">
+          <form method="get" class="row g-3">
+            <div class="col-6 col-sm-4 col-md-4 col-lg-2">
+              <label class="form-label fw-semibold" style="font-size:13px">📅 Dari</label>
+              <input type="date" name="from" class="form-control" value="<?= htmlspecialchars($from) ?>">
             </div>
-            <div class="col-md-2" style="text-align:right;align-self:end"><button class="btn btn-primary">Filter</button></div>
+            <div class="col-6 col-sm-4 col-md-4 col-lg-2">
+              <label class="form-label fw-semibold" style="font-size:13px">📅 Sampai</label>
+              <input type="date" name="to" class="form-control" value="<?= htmlspecialchars($to) ?>">
+            </div>
+            <div class="col-6 col-sm-4 col-md-4 col-lg-2">
+              <label class="form-label fw-semibold" style="font-size:13px">🏫 Kelas</label>
+              <select name="kelas" class="form-select">
+                <option value="">Semua Kelas</option>
+                <?php foreach ($kelasList as $k): ?>
+                  <option value="<?= htmlspecialchars($k['kelas']) ?>" <?= $kelas === $k['kelas'] ? 'selected' : '' ?>><?= htmlspecialchars($k['kelas']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-6 col-sm-6 col-md-6 col-lg-3">
+              <label class="form-label fw-semibold" style="font-size:13px">🎓 Jurusan</label>
+              <select name="jurusan" class="form-select">
+                <option value="">Semua Jurusan</option>
+                <?php foreach ($jurusanList as $j): ?>
+                  <option value="<?= htmlspecialchars($j['jurusan']) ?>" <?= $jurusan === $j['jurusan'] ? 'selected' : '' ?>><?= htmlspecialchars($j['jurusan']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-6 col-lg-3">
+              <label class="form-label fw-semibold" style="font-size:13px">⏰ Shift</label>
+              <select name="shift" class="form-select">
+                <option value="">Semua Shift</option>
+                <option value="pagi" <?= $shift === 'pagi' ? 'selected' : '' ?>>🌅 Shift Pagi</option>
+                <option value="siang" <?= $shift === 'siang' ? 'selected' : '' ?>>☀️ Shift Siang</option>
+              </select>
+            </div>
+
+            <div class="col-12 d-flex flex-wrap align-items-center justify-content-between gap-2 pt-2 border-top">
+              <div class="d-flex align-items-center gap-2">
+                <a href="laporan.php" class="btn btn-outline-secondary btn-sm px-3" style="font-weight:600">
+                  🔄 Reset
+                </a>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-wrap report-btn-group">
+                <button type="submit" name="export" value="1" class="btn btn-success px-3" title="Unduh CSV" style="font-weight:600;box-shadow:0 2px 6px rgba(16,185,129,0.25)">
+                  📥 CSV
+                </button>
+                <button type="button" class="btn btn-dark px-3" onclick="printReport()" style="font-weight:600;box-shadow:0 2px 6px rgba(15,23,42,0.2)">
+                  🖨️ Print
+                </button>
+                <button type="submit" class="btn btn-primary px-4" style="font-weight:600;box-shadow:0 2px 6px rgba(37,99,235,0.25)">
+                  🔍 Filter
+                </button>
+              </div>
+            </div>
           </form>
         </div>
 
-        <div class="stats-grid" style="margin-top:12px">
-          <div class="stat-card stat success">
-            <h6>Hadir</h6>
-            <div style="font-size:28px;font-weight:700;color:#059669"><?= $totalHadir ?></div>
+        <div class="laporan-stats-grid">
+          <!-- Stat Hadir -->
+          <div class="report-stat-card stat-card-hadir">
+            <div class="report-stat-header">
+              <span class="report-stat-title">Hadir</span>
+              <span class="report-stat-icon">✅</span>
+            </div>
+            <div class="report-stat-value"><?= number_format($totalHadir) ?></div>
+            <div class="report-stat-sub">Siswa Tepat Waktu</div>
           </div>
-          <div class="stat-card stat warn">
-            <h6>Terlambat</h6>
-            <div style="font-size:28px;font-weight:700;color:#b45309"><?= $totalTerlambat ?></div>
+
+          <!-- Stat Terlambat -->
+          <div class="report-stat-card stat-card-terlambat">
+            <div class="report-stat-header">
+              <span class="report-stat-title">Terlambat</span>
+              <span class="report-stat-icon">⏰</span>
+            </div>
+            <div class="report-stat-value"><?= number_format($totalTerlambat) ?></div>
+            <div class="report-stat-sub">Lewat Jam 07.00</div>
           </div>
-          <div class="stat-card stat" style="background:linear-gradient(90deg,#eef2ff,#f0f9ff)">
-            <h6>Izin</h6>
-            <div style="font-size:28px;font-weight:700;color:#0ea5a0"><?= $totalIzin ?></div>
+
+          <!-- Stat Izin -->
+          <div class="report-stat-card stat-card-izin">
+            <div class="report-stat-header">
+              <span class="report-stat-title">Izin</span>
+              <span class="report-stat-icon">📝</span>
+            </div>
+            <div class="report-stat-value"><?= number_format($totalIzin) ?></div>
+            <div class="report-stat-sub">Dispensasi / Surat</div>
           </div>
-          <div class="stat-card stat" style="background:linear-gradient(90deg,#f3e8ff,#faf5ff)">
-            <h6>Sakit</h6>
-            <div style="font-size:28px;font-weight:700;color:#6d28d9"><?= $totalSakit ?></div>
+
+          <!-- Stat Sakit -->
+          <div class="report-stat-card stat-card-sakit">
+            <div class="report-stat-header">
+              <span class="report-stat-title">Sakit</span>
+              <span class="report-stat-icon">🩺</span>
+            </div>
+            <div class="report-stat-value"><?= number_format($totalSakit) ?></div>
+            <div class="report-stat-sub">Surat Keterangan</div>
           </div>
-          <div class="stat-card stat" style="background:linear-gradient(90deg,#fee2e2,#fff1f2)">
-            <h6>Alpa</h6>
-            <div style="font-size:28px;font-weight:700;color:#b91c1c"><?= $totalAlpa ?></div>
+
+          <!-- Stat Alpa -->
+          <div class="report-stat-card stat-card-alpa">
+            <div class="report-stat-header">
+              <span class="report-stat-title">Alpa</span>
+              <span class="report-stat-icon">❌</span>
+            </div>
+            <div class="report-stat-value"><?= number_format($totalAlpa) ?></div>
+            <div class="report-stat-sub">Tanpa Keterangan</div>
           </div>
         </div>
 
@@ -202,7 +411,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
           <div class="table-responsive">
             <table class="table table-borderless">
               <thead>
-                <tr><th>NIS</th><th>Nama</th><th>Kelas</th><th>Hadir</th><th>Terlambat</th><th>Izin</th><th>Sakit</th><th>Alpa</th><th>Total</th></tr>
+                <tr><th>NIS</th><th>Nama</th><th>Kelas</th><th>Shift</th><th>Hadir</th><th>Terlambat</th><th>Izin</th><th>Sakit</th><th>Alpa</th><th>Total</th></tr>
               </thead>
               <tbody>
                 <?php foreach ($laporan as $row): $total = (int)$row['hadir']+(int)$row['terlambat']+(int)$row['izin']+(int)$row['sakit']+(int)$row['alpa']; ?>
@@ -210,6 +419,13 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                     <td><?= htmlspecialchars($row['nis'] ?? '') ?></td>
                     <td><?= htmlspecialchars($row['nama']) ?></td>
                     <td><?= htmlspecialchars($row['kelas']) ?></td>
+                    <td>
+                      <?php if (($row['shift'] ?? 'pagi') === 'siang'): ?>
+                        <span class="badge" style="background:#fef3c7;color:#b45309;font-weight:600;border:1px solid #fde68a">☀️ Siang</span>
+                      <?php else: ?>
+                        <span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:600;border:1px solid #bae6fd">🌅 Pagi</span>
+                      <?php endif; ?>
+                    </td>
                     <td><span class="tag hadir"><?= (int)$row['hadir'] ?></span></td>
                     <td><span class="tag terlambat"><?= (int)$row['terlambat'] ?></span></td>
                     <td><span class="tag izin"><?= (int)$row['izin'] ?></span></td>

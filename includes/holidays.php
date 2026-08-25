@@ -7,57 +7,52 @@ header('Content-Type: application/json');
 // Only allow JSON responses
 // On GET: return all holidays (ensure national holidays sync)
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    // sync national holidays for current year (ID)
-    $year = date('Y');
-    $existing = mysqli_query($conn, "SELECT COUNT(*) AS c FROM holidays WHERE YEAR(tanggal) = $year AND type = 'national'");
-    $count = mysqli_fetch_assoc($existing)['c'];
-    if ($count == 0) {
-        // try to fetch from Nager.Date API and insert
-        $api = "https://date.nager.at/api/v3/PublicHolidays/" . $year . "/ID";
-        $resp = null;
-        // try file_get_contents first
-        if (ini_get('allow_url_fopen')) {
-            $opts = ['http' => ['timeout' => 5]];
-            $context = stream_context_create($opts);
-            $resp = @file_get_contents($api, false, $context);
-        }
-        // fallback to cURL if available
-        if (!$resp && function_exists('curl_init')) {
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $api);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-            $resp = @curl_exec($ch);
-            curl_close($ch);
-        }
-        if ($resp) {
-            $data = json_decode($resp, true);
-            if (is_array($data)) {
-                $stmt = $conn->prepare("INSERT IGNORE INTO holidays (tanggal, nama, type) VALUES (?, ?, 'national')");
-                foreach ($data as $d) {
-                    $date = $d['date'] ?? null;
-                    $localName = $d['localName'] ?? ($d['name'] ?? '');
-                    if ($date) {
-                        $stmt->bind_param('ss', $date, $localName);
-                        @$stmt->execute();
-                    }
-                }
-            }
-        }
+    // Sinkronisasi otomatis hari libur nasional untuk tahun yang sedang ditampilkan di kalender
+    $startParam = $_GET['start'] ?? '';
+    $endParam = $_GET['end'] ?? '';
+
+    $startYear = $startParam ? (int)date('Y', strtotime($startParam)) : (int)date('Y');
+    $endYear = $endParam ? (int)date('Y', strtotime($endParam)) : (int)date('Y');
+
+    if ($startYear < 2000 || $startYear > 2100) $startYear = (int)date('Y');
+    if ($endYear < 2000 || $endYear > 2100) $endYear = $startYear;
+    if ($endYear < $startYear) $endYear = $startYear;
+
+    // Sinkronkan setiap tahun dalam rentang kalender yang dilihat
+    for ($y = $startYear; $y <= $endYear; $y++) {
+        syncNationalHolidays($conn, $y);
     }
-        $res = mysqli_query($conn, "SELECT id, tanggal AS start, nama AS title, type FROM holidays ORDER BY tanggal");
-        $out = [];
+    // Pastikan tahun ini dan tahun depan juga terisi
+    syncNationalHolidays($conn, (int)date('Y'));
+    syncNationalHolidays($conn, (int)date('Y') + 1);
+
+    $res = mysqli_query($conn, "SELECT id, tanggal AS start, nama AS title, type FROM holidays ORDER BY tanggal");
+    $out = [];
+    if ($res) {
         while ($row = mysqli_fetch_assoc($res)) {
             if (!isset($row['type']) || $row['type'] === 'custom') $row['type'] = 'school';
             $out[] = $row;
         }
+    }
     echo json_encode($out);
     exit;
 }
 
-// POST: add or delete holiday
+// POST: add, delete, or sync holiday
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? 'add';
+
+    if ($action === 'sync_national') {
+        $year = (int)($_POST['year'] ?? date('Y'));
+        // Hapus libur nasional lama tahun ini jika diminta sinkron ulang paksa
+        if (!empty($_POST['force'])) {
+            mysqli_query($conn, "DELETE FROM holidays WHERE YEAR(tanggal) = $year AND type = 'national'");
+        }
+        $count = syncNationalHolidays($conn, $year);
+        echo json_encode(['success' => true, 'year' => $year, 'count' => $count, 'message' => "Hari libur nasional tahun $year berhasil diperbarui ($count hari)."]);
+        exit;
+    }
+
     if ($action === 'add') {
         // only admin can add custom holidays
         if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {

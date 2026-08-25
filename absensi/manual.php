@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $siswa_id = (int)($_POST['siswa_id'] ?? 0);
   $tanggal = $_POST['tanggal'] ?? date('Y-m-d');
   $status = $_POST['status'] ?? 'hadir';
+  $shift = trim($_POST['shift'] ?? '');
 
   $holidayInfo = getHolidayInfo($tanggal, $conn);
   if ($holidayInfo) {
@@ -25,6 +26,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $message = 'Silakan pilih siswa terlebih dahulu.';
     $messageType = 'danger';
   } else {
+    // Ambil shift siswa jika tidak diset
+    if ($shift !== 'pagi' && $shift !== 'siang') {
+      $stS = $conn->prepare("SELECT shift FROM siswa WHERE id = ?");
+      $stS->bind_param('i', $siswa_id);
+      $stS->execute();
+      $rowS = $stS->get_result()->fetch_assoc();
+      $shift = $rowS['shift'] ?? 'pagi';
+    }
+
     $check = $conn->prepare("SELECT id FROM absensi WHERE siswa_id = ? AND tanggal = ?");
     $check->bind_param('is', $siswa_id, $tanggal);
     $check->execute();
@@ -32,17 +42,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $message = 'Absensi untuk siswa ini sudah ada pada tanggal tersebut.';
       $messageType = 'warning';
     } else {
-      $insert = $conn->prepare("INSERT INTO absensi (siswa_id, tanggal, status, jam_scan) VALUES (?, ?, ?, ?)");
+      $insert = $conn->prepare("INSERT INTO absensi (siswa_id, tanggal, status, shift, jam_scan) VALUES (?, ?, ?, ?, ?)");
       $jam = date('H:i:s');
-      $insert->bind_param('isss', $siswa_id, $tanggal, $status, $jam);
+      $insert->bind_param('issss', $siswa_id, $tanggal, $status, $shift, $jam);
       $insert->execute();
-      $message = 'Absensi manual berhasil disimpan.';
+      $shiftLabel = $shift === 'siang' ? 'Shift Siang' : 'Shift Pagi';
+      $message = 'Absensi manual (' . $shiftLabel . ') berhasil disimpan.';
       $messageType = 'success';
     }
   }
 }
 
-$siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE status = 'aktif' ORDER BY nama")->fetch_all(MYSQLI_ASSOC);
+$siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan, shift FROM siswa WHERE status = 'aktif' ORDER BY nama")->fetch_all(MYSQLI_ASSOC);
 ?>
 <!doctype html>
 <html lang="id">
@@ -199,15 +210,23 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
                       <?php if (empty($siswaList)): ?>
                         <div class="text-center p-3 text-muted" style="font-size:13px">Belum ada data siswa aktif.</div>
                       <?php else: ?>
-                        <?php foreach ($siswaList as $s): ?>
+                        <?php foreach ($siswaList as $s):
+                          $sShift = ($s['shift'] ?? 'pagi') === 'siang' ? 'siang' : 'pagi';
+                          $sShiftText = $sShift === 'siang' ? '☀️ Siang' : '🌅 Pagi';
+                          $sShiftBadge = $sShift === 'siang' ? 'background:#fef3c7;color:#b45309;border:1px solid #fde68a' : 'background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd';
+                        ?>
                           <div class="siswa-row"
                             data-id="<?= $s['id'] ?>"
                             data-nama="<?= htmlspecialchars($s['nama']) ?>"
                             data-nis="<?= htmlspecialchars($s['nis']) ?>"
                             data-kelas="<?= htmlspecialchars($s['kelas'] ?? '') ?>"
-                            data-jurusan="<?= htmlspecialchars($s['jurusan'] ?? '') ?>">
+                            data-jurusan="<?= htmlspecialchars($s['jurusan'] ?? '') ?>"
+                            data-shift="<?= $sShift ?>">
                             <div>
-                              <div class="siswa-nama" style="font-weight:600;font-size:14px"><?= htmlspecialchars($s['nama']) ?></div>
+                              <div class="siswa-nama" style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <span><?= htmlspecialchars($s['nama']) ?></span>
+                                <span class="badge" style="<?= $sShiftBadge ?>;font-size:10px;padding:2px 6px"><?= $sShiftText ?></span>
+                              </div>
                               <div class="siswa-meta" style="font-size:12px;color:var(--muted)">
                                 NIS: <?= htmlspecialchars($s['nis']) ?>
                                 <?= !empty($s['kelas']) ? ' · Kelas: ' . htmlspecialchars($s['kelas']) : '' ?>
@@ -224,6 +243,22 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
                         </div>
                       <?php endif; ?>
                     </div>
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label" style="font-weight:600">Shift Absensi</label>
+                  <div style="display:flex;gap:12px">
+                    <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+                      <input type="radio" name="shift" id="shiftPagiRadio" value="pagi" checked style="margin-right:6px">
+                      <strong>🌅 Shift Pagi</strong>
+                      <div style="font-size:11px;color:var(--muted);margin-top:2px">Masuk 07.00 | Pulang 12.00 (Jum'at 10.00)</div>
+                    </label>
+                    <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+                      <input type="radio" name="shift" id="shiftSiangRadio" value="siang" style="margin-right:6px">
+                      <strong>☀️ Shift Siang</strong>
+                      <div style="font-size:11px;color:var(--muted);margin-top:2px">Masuk 12.30 / 13.00 | Pulang 17.00</div>
+                    </label>
                   </div>
                 </div>
 
@@ -312,15 +347,26 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan FROM siswa WHERE
         const nis = row.getAttribute('data-nis');
         const kelas = row.getAttribute('data-kelas');
         const jurusan = row.getAttribute('data-jurusan');
+        const shift = row.getAttribute('data-shift') || 'pagi';
 
         // Update hidden input
         selectedIdInput.value = id;
+
+        // Auto select shift radio
+        if (shift === 'siang') {
+          const rSiang = document.getElementById('shiftSiangRadio');
+          if (rSiang) rSiang.checked = true;
+        } else {
+          const rPagi = document.getElementById('shiftPagiRadio');
+          if (rPagi) rPagi.checked = true;
+        }
 
         // Update selected display card
         selectedNama.textContent = nama;
         let info = 'NIS: ' + nis;
         if (kelas) info += ' · Kelas: ' + kelas;
         if (jurusan) info += ' (' + jurusan + ')';
+        info += ' · ' + (shift === 'siang' ? '☀️ Shift Siang' : '🌅 Shift Pagi');
         selectedNisKelas.textContent = info;
         selectedCard.style.display = 'block';
 

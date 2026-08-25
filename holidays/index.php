@@ -8,30 +8,38 @@ if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
 }
 
 $message = '';
-// handle add
+// handle add, delete, sync
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['sync_national'])) {
+        $y = (int)($_POST['sync_year'] ?? date('Y'));
+        if (!empty($_POST['force_sync'])) {
+            mysqli_query($conn, "DELETE FROM holidays WHERE YEAR(tanggal) = $y AND type = 'national'");
+        }
+        $c = syncNationalHolidays($conn, $y);
+        $message = "Hari libur nasional tahun $y berhasil diperbarui ($c hari).";
+    }
     if (isset($_POST['add'])) {
         $tanggal = $_POST['tanggal'] ?? '';
         $nama = trim($_POST['nama'] ?? '');
         if ($tanggal && $nama) {
-        // store admin-added holidays as 'school' type (no custom type)
-        $stmt = $conn->prepare("INSERT INTO holidays (tanggal, nama, type, created_by) VALUES (?, ?, 'school', ?)");
+            $stmt = $conn->prepare("INSERT INTO holidays (tanggal, nama, type, created_by) VALUES (?, ?, 'school', ?)");
             $uid = $_SESSION['user_id'];
             $stmt->bind_param('ssi', $tanggal, $nama, $uid);
-            if ($stmt->execute()) $message = 'Libur ditambahkan.'; else $message = 'Gagal menambahkan.';
+            if ($stmt->execute()) $message = 'Libur sekolah berhasil ditambahkan.'; else $message = 'Gagal menambahkan libur.';
         } else $message = 'Tanggal dan nama diperlukan.';
     }
     if (isset($_POST['delete'])) {
         $id = (int)($_POST['id'] ?? 0);
-        if ($id>0) {
+        if ($id > 0) {
             $stmt = $conn->prepare("DELETE FROM holidays WHERE id = ? AND type <> 'national'");
             $stmt->bind_param('i', $id);
-            if ($stmt->execute()) $message = 'Libur dihapus.'; else $message = 'Gagal menghapus.';
+            if ($stmt->execute()) $message = 'Libur berhasil dihapus.'; else $message = 'Gagal menghapus.';
         }
     }
-    }
+}
 
-$holidays = $conn->query("SELECT id, tanggal, nama, type, created_at FROM holidays ORDER BY tanggal DESC")->fetch_all(MYSQLI_ASSOC);
+$selectedYear = (int)($_GET['year'] ?? date('Y'));
+$holidays = $conn->query("SELECT id, tanggal, nama, type, created_at FROM holidays WHERE YEAR(tanggal) = $selectedYear ORDER BY tanggal ASC")->fetch_all(MYSQLI_ASSOC);
 ?>
 <!doctype html>
 <html lang="id">
@@ -104,52 +112,101 @@ $holidays = $conn->query("SELECT id, tanggal, nama, type, created_at FROM holida
       <div class="main-inner">
         <div class="top-hero">
           <div>
-            <div style="font-size:16px;font-weight:700">Kelola Hari Libur Sekolah</div>
-            <div style="font-size:13px;color:rgba(255,255,255,0.7)">Tambah, edit, atau hapus hari libur khusus sekolah</div>
+            <div style="font-size:16px;font-weight:700">Kelola Hari Libur & Kalender Akademik</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.7)">Sinkronisasi libur nasional dan kelola libur khusus sekolah</div>
+          </div>
+          <div>
+            <a href="../dashboard.php" class="btn btn-outline-light btn-sm">← Kembali ke Dashboard</a>
           </div>
         </div>
 
-        <?php if ($message): ?><div class="alert alert-info" style="margin-top:12px"><?= htmlspecialchars($message) ?></div><?php endif; ?>
+        <?php if ($message): ?><div class="alert alert-info mt-3"><?= htmlspecialchars($message) ?></div><?php endif; ?>
+
+        <!-- Sync National Holidays Bar -->
+        <div class="card my-3 p-3" style="border-radius:12px;background:#f8fafc">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <div style="font-weight:700;font-size:14px;color:#1e293b">🔄 Sinkronisasi Hari Libur Nasional</div>
+              <div style="font-size:12px;color:var(--muted)">Perbarui hari libur nasional otomatis setiap pergantian tahun</div>
+            </div>
+            <form method="post" class="d-flex align-items-center gap-2">
+              <input type="number" name="sync_year" class="form-control form-control-sm" style="width:90px" value="<?= $selectedYear ?>" min="2020" max="2035" required>
+              <input type="hidden" name="force_sync" value="1">
+              <button type="submit" name="sync_national" class="btn btn-sm btn-primary" style="white-space:nowrap">
+                ⚡ Sinkronkan Libur Nasional
+              </button>
+            </form>
+          </div>
+        </div>
 
         <!-- modal-like centered management panel -->
-        <div id="holidayPanel" style="display:flex;align-items:center;justify-content:center;min-height:60vh;padding:12px 0">
-          <div style="width:560px;max-width:100%;background:#f3f3f3;border-radius:12px;overflow:hidden;box-shadow:0 20px 50px rgba(2,6,23,0.6)">
-            <div style="background:#111316;color:#fff;padding:14px 16px;border-top-left-radius:12px;border-top-right-radius:12px;display:flex;justify-content:space-between;align-items:center">
+        <div id="holidayPanel" style="display:flex;align-items:flex-start;justify-content:center;padding:12px 0">
+          <div style="width:680px;max-width:100%;background:#f3f3f3;border-radius:12px;overflow:hidden;box-shadow:0 15px 40px rgba(2,6,23,0.15)">
+            <div style="background:#111316;color:#fff;padding:14px 18px;border-top-left-radius:12px;border-top-right-radius:12px;display:flex;justify-content:space-between;align-items:center">
               <div>
-                <div style="font-weight:700">Kelola Hari Libur Sekolah</div>
-                <div style="font-size:12px;color:rgba(255,255,255,0.6)">Tambah, edit, atau hapus hari libur khusus sekolah</div>
+                <div style="font-weight:700">Daftar Hari Libur Tahun <?= $selectedYear ?></div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.6)">Kelola libur sekolah dan lihat libur nasional</div>
               </div>
-              <button onclick="window.location='../dashboard.php'" style="background:transparent;border:0;color:#cbd5db;font-size:18px">✕</button>
+              <div class="d-flex gap-2 align-items-center">
+                <form method="get" class="d-flex align-items-center gap-1">
+                  <select name="year" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="this.form.submit()">
+                    <?php for ($y = date('Y') - 2; $y <= date('Y') + 3; $y++): ?>
+                      <option value="<?= $y ?>" <?= $selectedYear === $y ? 'selected' : '' ?>><?= $y ?></option>
+                    <?php endfor; ?>
+                  </select>
+                </form>
+                <button onclick="window.location='../dashboard.php'" style="background:transparent;border:0;color:#cbd5db;font-size:18px">✕</button>
+              </div>
             </div>
 
-            <div style="padding:12px;background:#fff">
+            <div style="padding:14px;background:#fff;border-bottom:1px solid #e2e8f0">
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px">Tambah Libur Khusus Sekolah:</div>
               <form method="post" style="display:flex;gap:8px;align-items:center">
-                <div style="flex:0 0 140px"><input type="date" name="tanggal" class="form-control" placeholder="dd/mm/yyyy"></div>
-                <div style="flex:1"><input name="nama" class="form-control" placeholder="Nama hari libur..."></div>
-                <div><button class="btn" name="add" style="background:#8b5cf6;color:#fff;padding:8px 14px;border-radius:8px">+ Tambah</button></div>
+                <div style="flex:0 0 150px"><input type="date" name="tanggal" class="form-control form-control-sm" required></div>
+                <div style="flex:1"><input name="nama" class="form-control form-control-sm" placeholder="Nama hari libur sekolah..." required></div>
+                <div><button class="btn btn-sm" name="add" style="background:#8b5cf6;color:#fff;padding:6px 14px;border-radius:6px">+ Tambah</button></div>
               </form>
             </div>
 
-            <div style="padding:28px;text-align:center;background:#fff;min-height:180px;border-top:1px solid rgba(2,6,23,0.04)">
-              <?php
-                $schoolH = array_filter($holidays, function($x){ return $x['type'] !== 'national'; });
-              ?>
-              <?php if (empty($schoolH)): ?>
-                <div style="color:#9ca3af;margin-bottom:12px"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="14" rx="2" stroke="#c7c7c7" stroke-width="1.2"/><path d="M7 9H17" stroke="#c7c7c7" stroke-width="1.2" stroke-linecap="round"/></svg></div>
-                <div style="font-weight:700">Belum ada hari libur sekolah</div>
-                <div style="color:#9ca3af;font-size:13px;margin-top:6px">Tambahkan menggunakan form di atas</div>
+            <div style="padding:16px;background:#fff;min-height:220px;max-height:480px;overflow-y:auto">
+              <?php if (empty($holidays)): ?>
+                <div style="text-align:center;padding:30px;color:var(--muted)">
+                  <div style="font-size:36px;margin-bottom:8px">🏖️</div>
+                  <div style="font-weight:700">Belum ada hari libur di tahun <?= $selectedYear ?></div>
+                  <div style="font-size:12px;margin-top:4px">Gunakan tombol "Sinkronkan Libur Nasional" di atas atau form tambah di atas.</div>
+                </div>
               <?php else: ?>
-                <div style="text-align:left">
-                  <?php foreach($schoolH as $h): ?>
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(2,6,23,0.04)">
-                      <div style="display:flex;gap:12px;align-items:center"><div style="width:44px;height:44;border-radius:8px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-weight:700;color:#2563eb"><?= date('j',strtotime($h['tanggal'])) ?></div>
-                        <div><div style="font-weight:700"><?= htmlspecialchars($h['nama']) ?></div><div style="font-size:12px;color:#9ca3af"><?= date('l, j M Y',strtotime($h['tanggal'])) ?></div></div>
+                <div>
+                  <?php foreach($holidays as $h):
+                    $isNat = ($h['type'] === 'national');
+                    $typeBadge = $isNat ? '<span class="badge" style="background:#fee2e2;color:#b91c1c;font-size:10px">Nasional</span>' : '<span class="badge" style="background:#e0e7ff;color:#4338ca;font-size:10px">Sekolah</span>';
+                  ?>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(2,6,23,0.06)">
+                      <div style="display:flex;gap:12px;align-items:center">
+                        <div style="width:40px;height:40px;border-radius:8px;background:<?= $isNat ? '#fef2f2' : '#eef2ff' ?>;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;color:<?= $isNat ? '#dc2626' : '#2563eb' ?>">
+                          <span style="font-size:14px;line-height:1"><?= date('j', strtotime($h['tanggal'])) ?></span>
+                          <span style="font-size:9px;text-transform:uppercase"><?= substr(getIndonesianMonthName(date('n', strtotime($h['tanggal']))), 0, 3) ?></span>
+                        </div>
+                        <div>
+                          <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">
+                            <span><?= htmlspecialchars($h['nama']) ?></span>
+                            <?= $typeBadge ?>
+                          </div>
+                          <div style="font-size:12px;color:#9ca3af"><?= formatTanggalIndo($h['tanggal'], true) ?></div>
+                        </div>
                       </div>
                       <div>
-                        <form method="post" style="display:inline">
-                          <input type="hidden" name="id" value="<?= $h['id'] ?>">
-                          <button name="delete" class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus hari libur?')">Hapus</button>
-                        </form>
+                        <?php if (!$isNat): ?>
+                          <button type="button" class="btn btn-sm btn-outline-danger btn-delete-holiday"
+                            data-id="<?= $h['id'] ?>"
+                            data-nama="<?= htmlspecialchars($h['nama']) ?>"
+                            data-tanggal="<?= htmlspecialchars(formatTanggalIndo($h['tanggal'], true)) ?>"
+                            style="font-size:11px;padding:3px 8px">
+                            Hapus
+                          </button>
+                        <?php else: ?>
+                          <span style="font-size:11px;color:#94a3b8">Otomatis</span>
+                        <?php endif; ?>
                       </div>
                     </div>
                   <?php endforeach; ?>
@@ -157,17 +214,70 @@ $holidays = $conn->query("SELECT id, tanggal, nama, type, created_at FROM holida
               <?php endif; ?>
             </div>
 
-            <div style="padding:12px;background:#fff;border-top:1px solid rgba(2,6,23,0.04);display:flex;justify-content:space-between;align-items:center">
-              <div style="color:#9ca3af"><?= count($schoolH) ?> hari libur sekolah tersimpan</div>
-              <div><button class="btn btn-dark" onclick="window.location='../dashboard.php'">Selesai</button></div>
+            <div style="padding:12px 18px;background:#fff;border-top:1px solid rgba(2,6,23,0.06);display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:12px;color:#9ca3af">Total <?= count($holidays) ?> hari libur di tahun <?= $selectedYear ?></div>
+              <div><button class="btn btn-sm btn-dark" onclick="window.location='../dashboard.php'">Selesai</button></div>
             </div>
+          </div>
+        </div>
           </div>
         </div>
 
       </div>
     </main>
   </div>
+  <!-- Modal Konfirmasi Hapus Libur (Simpel & Elegan) -->
+  <div class="modal fade" id="modalDeleteHoliday" tabindex="-1" aria-labelledby="modalDeleteHolidayLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 380px;">
+      <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 40px rgba(0,0,0,0.15); overflow: hidden;">
+        <div class="modal-body text-center p-4">
+          <div style="width: 52px; height: 52px; border-radius: 50%; background: #fee2e2; color: #ef4444; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 12px;">
+            🗑️
+          </div>
+          <h6 style="font-weight: 700; font-size: 16px; color: #1e293b; margin-bottom: 6px;">Hapus Hari Libur</h6>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">
+            Apakah Anda yakin ingin menghapus libur <strong id="deleteHolidayNama" class="text-dark">-</strong> (<span id="deleteHolidayTanggal">-</span>)?
+          </p>
+        </div>
+        <form method="post" id="formDeleteHoliday" style="margin:0">
+          <input type="hidden" name="delete" value="1">
+          <input type="hidden" name="id" id="deleteHolidayId" value="">
+          <div class="modal-footer d-flex justify-content-center gap-2 p-3" style="background: #f8fafc; border-top: 1px solid #f1f5f9;">
+            <button type="button" class="btn btn-light border px-4 btn-sm" data-bs-dismiss="modal" style="font-weight: 600;">Batal</button>
+            <button type="submit" class="btn btn-danger px-4 btn-sm" style="font-weight: 600;">Ya, Hapus</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/main.js?v=1.4"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const modalDeleteEl = document.getElementById('modalDeleteHoliday');
+      if (modalDeleteEl) {
+        const modalDelete = new bootstrap.Modal(modalDeleteEl);
+        const deleteButtons = document.querySelectorAll('.btn-delete-holiday');
+        const deleteHolidayId = document.getElementById('deleteHolidayId');
+        const deleteHolidayNama = document.getElementById('deleteHolidayNama');
+        const deleteHolidayTanggal = document.getElementById('deleteHolidayTanggal');
+
+        deleteButtons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            const nama = this.getAttribute('data-nama');
+            const tanggal = this.getAttribute('data-tanggal');
+
+            deleteHolidayId.value = id;
+            deleteHolidayNama.textContent = nama;
+            deleteHolidayTanggal.textContent = tanggal;
+
+            modalDelete.show();
+          });
+        });
+      }
+    });
+  </script>
 </body>
 </html>

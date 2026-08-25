@@ -1110,43 +1110,133 @@ body.sidebar-collapsed .main {
   color: #6d28d9;
 }
 
-/* Custom Modal Dialog */
+/* ==========================================================================
+   Comprehensive Modal Pop-Up Animations (Entrance & Exit)
+   ========================================================================== */
+
+/* 1. Enhanced Bootstrap 5 Modal Transitions */
+.modal.fade {
+  opacity: 0;
+  transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.modal.fade.show {
+  opacity: 1;
+}
+
+.modal.fade .modal-dialog {
+  transform: scale(0.88) translateY(-25px);
+  opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out;
+}
+
+.modal.show .modal-dialog {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.modal.fade:not(.show) .modal-dialog {
+  transform: scale(0.92) translateY(12px);
+  opacity: 0;
+  transition: transform 0.2s ease-in, opacity 0.18s ease-in;
+}
+
+/* Modal backdrop animation */
+.modal-backdrop.fade {
+  opacity: 0;
+  transition: opacity 0.22s ease-in-out;
+}
+
+.modal-backdrop.show {
+  opacity: 0.55;
+}
+
+/* 2. Custom Overlay Modal Transitions */
 .custom-modal-overlay {
-  display: none;
+  display: flex !important;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   z-index: 9999;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.22s ease-in-out, visibility 0.22s ease-in-out;
 }
 
 .custom-modal-overlay.show {
-  display: flex !important;
   opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 .custom-modal-card {
   background: #ffffff;
   border-radius: 14px;
   width: 100%;
-  max-width: 380px;
+  max-width: 400px;
   margin: 16px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  transform: scale(0.95);
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transform: scale(0.88) translateY(-20px);
+  opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out;
   overflow: hidden;
 }
 
 .custom-modal-overlay.show .custom-modal-card {
-  transform: scale(1);
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+/* 3. Standalone Modal Page Animations (e.g. siswa/form.php) */
+.standalone-modal-overlay {
+  animation: overlayFadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.standalone-modal-card {
+  animation: modalScaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalScaleIn {
+  from {
+    transform: scale(0.88) translateY(-25px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInBar {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .custom-modal-header {
@@ -1475,4 +1565,29 @@ body.sidebar-collapsed .main {
 .siswa-row.selected {
   background: linear-gradient(90deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.03));
   outline: 1px solid rgba(99, 102, 241, 0.12)
+}
+
+/* ========================================================
+   GLOBAL MODAL POP-UP ANIMATIONS (MUNCUL & KELUAR - SMOOTH)
+   ======================================================== */
+
+.modal.fade .modal-dialog {
+  opacity: 0;
+  transform: scale(0.85) translateY(-20px);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease !important;
+}
+
+.modal.fade.show .modal-dialog {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s ease !important;
+}
+
+.modal-backdrop.fade {
+  opacity: 0;
+  transition: opacity 0.22s ease !important;
+}
+
+.modal-backdrop.fade.show {
+  opacity: 0.55 !important;
 }

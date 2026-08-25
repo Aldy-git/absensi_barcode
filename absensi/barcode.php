@@ -53,6 +53,7 @@ if (isset($_GET['download']) && !empty($_GET['code'])) {
 $search = trim($_GET['search'] ?? '');
 $kelasFilter = trim($_GET['kelas'] ?? '');
 $jurusanFilter = trim($_GET['jurusan'] ?? '');
+$shiftFilter = trim($_GET['shift'] ?? '');
 $barcodeType = trim($_GET['type'] ?? 'EAN13'); // Default EAN-13
 
 // Validasi barcode type
@@ -66,12 +67,13 @@ if (!array_key_exists($barcodeType, $allowedTypes)) {
   $barcodeType = 'EAN13';
 }
 
-function buildBarcodeQuery($type, $search, $kelas, $jurusan)
+function buildBarcodeQuery($type, $search, $kelas, $jurusan, $shift = '')
 {
   $p = ['type' => $type];
   if ($search !== '') $p['search'] = $search;
   if ($kelas !== '') $p['kelas'] = $kelas;
   if ($jurusan !== '') $p['jurusan'] = $jurusan;
+  if ($shift !== '') $p['shift'] = $shift;
   return 'barcode.php?' . http_build_query($p);
 }
 
@@ -94,6 +96,11 @@ if ($kelasFilter !== '') {
 if ($jurusanFilter !== '') {
   $sql .= " AND jurusan = ?";
   $params[] = $jurusanFilter;
+  $types .= 's';
+}
+if ($shiftFilter !== '') {
+  $sql .= " AND shift = ?";
+  $params[] = $shiftFilter;
   $types .= 's';
 }
 
@@ -212,7 +219,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
 
           <div class="card mb-3" style="border-radius:12px;padding:16px">
             <form method="get" class="row g-2 align-items-center">
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <input type="text" name="search" class="form-control" placeholder="Cari nama / NIS siswa..." value="<?= htmlspecialchars($search) ?>">
               </div>
               <div class="col-md-2">
@@ -240,11 +247,15 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                   <?php endforeach; ?>
                 </select>
               </div>
-              <div class="col-md-1">
-                <button type="submit" class="btn btn-primary w-100">Filter</button>
+              <div class="col-md-2">
+                <select name="shift" class="form-select">
+                  <option value="">Semua Shift</option>
+                  <option value="pagi" <?= $shiftFilter === 'pagi' ? 'selected' : '' ?>>🌅 Shift Pagi</option>
+                  <option value="siang" <?= $shiftFilter === 'siang' ? 'selected' : '' ?>>☀️ Shift Siang</option>
+                </select>
               </div>
-              <div class="col-md-1">
-                <a href="barcode.php" class="btn btn-outline-secondary w-100">Reset</a>
+              <div class="col-md-1 d-flex gap-1">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
               </div>
             </form>
           </div>
@@ -273,7 +284,14 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                     <img src="<?= $imgUrl ?>" alt="Barcode <?= htmlspecialchars($s['nama']) ?>" style="max-height:<?= $imgHeight ?>;max-width:<?= $imgWidth ?>;object-fit:contain" loading="lazy">
                   </div>
                   <div class="barcode-name"><?= htmlspecialchars($s['nama']) ?></div>
-                  <div class="barcode-sub"><?= htmlspecialchars($s['nis']) ?> · <?= $kelasInfo ?: 'Siswa' ?></div>
+                  <div class="barcode-sub" style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
+                    <span><?= htmlspecialchars($s['nis']) ?> · <?= $kelasInfo ?: 'Siswa' ?></span>
+                    <?php if (($s['shift'] ?? 'pagi') === 'siang'): ?>
+                      <span class="badge" style="background:#fef3c7;color:#b45309;font-size:10px;padding:2px 6px;border:1px solid #fde68a">☀️ Siang</span>
+                    <?php else: ?>
+                      <span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:10px;padding:2px 6px;border:1px solid #bae6fd">🌅 Pagi</span>
+                    <?php endif; ?>
+                  </div>
                   <div class="barcode-actions">
                     <button type="button" class="btn-download"
                       data-name="<?= htmlspecialchars($s['nama']) ?>"

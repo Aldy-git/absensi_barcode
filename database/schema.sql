@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS siswa (
   kelas VARCHAR(50) NOT NULL,
   jurusan VARCHAR(100) NOT NULL,
   jenis_kelamin CHAR(1) NOT NULL,
+  shift ENUM('pagi','siang') NOT NULL DEFAULT 'pagi',
   barcode_code VARCHAR(100) NOT NULL UNIQUE,
   foto VARCHAR(255) DEFAULT NULL,
   status ENUM('aktif','nonaktif') NOT NULL DEFAULT 'aktif',
@@ -26,10 +27,21 @@ CREATE TABLE IF NOT EXISTS absensi (
   siswa_id INT NOT NULL,
   tanggal DATE NOT NULL,
   status ENUM('hadir','terlambat','izin','sakit','alpa') NOT NULL,
+  shift ENUM('pagi','siang') NOT NULL DEFAULT 'pagi',
   jam_scan TIME DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY unique_siswa_tanggal (siswa_id, tanggal),
   CONSTRAINT fk_absensi_siswa FOREIGN KEY (siswa_id) REFERENCES siswa(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS holidays (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tanggal DATE NOT NULL,
+  nama VARCHAR(255) NOT NULL,
+  type ENUM('national','school') NOT NULL DEFAULT 'school',
+  created_by INT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_holiday_date (tanggal, type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO users (username, password, role) VALUES

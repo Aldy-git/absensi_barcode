@@ -73,7 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['ajax']) && $_POST['a
   $countQuery = $conn->prepare("SELECT
         COUNT(*) as total,
         SUM(CASE WHEN status = 'hadir' THEN 1 ELSE 0 END) as total_hadir,
-        SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as total_terlambat
+        SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as total_terlambat,
+        SUM(CASE WHEN shift = 'pagi' THEN 1 ELSE 0 END) as total_pagi,
+        SUM(CASE WHEN shift = 'siang' THEN 1 ELSE 0 END) as total_siang
         FROM absensi WHERE tanggal = ?");
   $countQuery->bind_param('s', $selectedTanggal);
   $countQuery->execute();
@@ -81,60 +83,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['ajax']) && $_POST['a
 
   if ($existing) {
     $jamExisting = !empty($existing['jam_scan']) ? substr($existing['jam_scan'], 0, 5) : '-';
+    $existingShift = !empty($existing['shift']) ? ($existing['shift'] === 'siang' ? 'Shift Siang' : 'Shift Pagi') : 'Shift Pagi';
     echo json_encode([
       'success' => false,
       'already_scanned' => true,
       'type' => 'warning',
-      'message' => 'Siswa <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['nis']) . ') sudah melakukan absensi hari ini dengan status <strong>' . htmlspecialchars(ucfirst($existing['status'])) . '</strong> pada jam ' . htmlspecialchars($jamExisting) . '.',
+      'message' => 'Siswa <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['nis']) . ') sudah melakukan absensi (' . $existingShift . ') hari ini dengan status <strong>' . htmlspecialchars(ucfirst($existing['status'])) . '</strong> pada jam ' . htmlspecialchars($jamExisting) . ' WIB.',
       'siswa' => [
         'id' => $siswa['id'],
         'nama' => $siswa['nama'],
         'nis' => $siswa['nis'],
         'kelas' => $siswa['kelas'],
-        'jurusan' => $siswa['jurusan'] ?? ''
+        'jurusan' => $siswa['jurusan'] ?? '',
+        'shift' => $siswa['shift'] ?? 'pagi'
       ],
       'absensi' => [
         'status' => $existing['status'],
+        'shift' => $existing['shift'] ?? 'pagi',
         'jam_scan' => $jamExisting,
         'tanggal' => $selectedTanggal
       ],
       'stats' => [
         'total' => (int)($statsResult['total'] ?? 0),
         'hadir' => (int)($statsResult['total_hadir'] ?? 0),
-        'terlambat' => (int)($statsResult['total_terlambat'] ?? 0)
+        'terlambat' => (int)($statsResult['total_terlambat'] ?? 0),
+        'pagi' => (int)($statsResult['total_pagi'] ?? 0),
+        'siang' => (int)($statsResult['total_siang'] ?? 0)
       ]
     ]);
     exit;
   }
 
-  // Determine status based on time (07:00 cut-off)
+  // Evaluasi waktu berdasarkan aturan shift siswa
+  $siswaShift = $siswa['shift'] ?? 'pagi';
   $jam = date('H:i:s');
-  $hour = (int)date('H');
-  $minute = (int)date('i');
-  $status = ($hour > 7 || ($hour === 7 && $minute > 0)) ? 'terlambat' : 'hadir';
+  $eval = evaluateAttendanceStatus($siswaShift, $jam, $selectedTanggal);
 
-  $insert = $conn->prepare("INSERT INTO absensi (siswa_id, tanggal, status, jam_scan) VALUES (?, ?, ?, ?)");
-  $insert->bind_param('isss', $siswa['id'], $selectedTanggal, $status, $jam);
+  if ($eval['is_early']) {
+    echo json_encode([
+      'success' => false,
+      'is_early' => true,
+      'type' => 'warning',
+      'message' => 'Siswa <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['kelas']) . ') terdaftar pada <strong>' . htmlspecialchars($eval['rules']['label']) . '</strong>. ' . $eval['message'],
+      'siswa' => [
+        'id' => $siswa['id'],
+        'nama' => $siswa['nama'],
+        'nis' => $siswa['nis'],
+        'kelas' => $siswa['kelas'],
+        'jurusan' => $siswa['jurusan'] ?? '',
+        'shift' => $siswaShift
+      ],
+      'stats' => [
+        'total' => (int)($statsResult['total'] ?? 0),
+        'hadir' => (int)($statsResult['total_hadir'] ?? 0),
+        'terlambat' => (int)($statsResult['total_terlambat'] ?? 0),
+        'pagi' => (int)($statsResult['total_pagi'] ?? 0),
+        'siang' => (int)($statsResult['total_siang'] ?? 0)
+      ]
+    ]);
+    exit;
+  }
+
+  $status = $eval['status'];
+  $insert = $conn->prepare("INSERT INTO absensi (siswa_id, tanggal, status, shift, jam_scan) VALUES (?, ?, ?, ?, ?)");
+  $insert->bind_param('issss', $siswa['id'], $selectedTanggal, $status, $siswaShift, $jam);
 
   if ($insert->execute()) {
     // Query updated stats
     $countQuery->execute();
     $updatedStats = $countQuery->get_result()->fetch_assoc();
     $jamFormatted = substr($jam, 0, 5);
+    $shiftLabel = $eval['rules']['label'];
+    $statusText = $status === 'hadir' ? 'Hadir Tepat Waktu' : 'Terlambat';
 
     echo json_encode([
       'success' => true,
       'type' => 'success',
-      'message' => 'Absensi berhasil dicatat untuk <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['kelas']) . ') - Status: <strong>' . htmlspecialchars(ucfirst($status)) . '</strong> (' . $jamFormatted . ').',
+      'message' => 'Absensi berhasil dicatat untuk <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['kelas']) . ') - <strong>' . $shiftLabel . '</strong>: <strong>' . $statusText . '</strong> (' . $jamFormatted . ' WIB).',
       'siswa' => [
         'id' => $siswa['id'],
         'nama' => $siswa['nama'],
         'nis' => $siswa['nis'],
         'kelas' => $siswa['kelas'],
-        'jurusan' => $siswa['jurusan'] ?? ''
+        'jurusan' => $siswa['jurusan'] ?? '',
+        'shift' => $siswaShift
       ],
       'absensi' => [
         'status' => $status,
+        'shift' => $siswaShift,
         'jam_scan' => $jamFormatted,
         'jam_full' => $jam,
         'tanggal' => $selectedTanggal
@@ -142,7 +178,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['ajax']) && $_POST['a
       'stats' => [
         'total' => (int)($updatedStats['total'] ?? 0),
         'hadir' => (int)($updatedStats['total_hadir'] ?? 0),
-        'terlambat' => (int)($updatedStats['total_terlambat'] ?? 0)
+        'terlambat' => (int)($updatedStats['total_terlambat'] ?? 0),
+        'pagi' => (int)($updatedStats['total_pagi'] ?? 0),
+        'siang' => (int)($updatedStats['total_siang'] ?? 0)
       ]
     ]);
     exit;
@@ -187,29 +225,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $existing = $check->get_result()->fetch_assoc();
 
       if ($existing) {
-        $message = 'Siswa <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['nis']) . ') sudah melakukan absensi hari ini dengan status <strong>' . htmlspecialchars(ucfirst($existing['status'])) . '</strong> pada jam ' . htmlspecialchars(substr($existing['jam_scan'] ?? '', 0, 5)) . '.';
+        $existingShift = !empty($existing['shift']) ? ($existing['shift'] === 'siang' ? 'Shift Siang' : 'Shift Pagi') : 'Shift Pagi';
+        $message = 'Siswa <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['nis']) . ') sudah melakukan absensi (' . $existingShift . ') hari ini dengan status <strong>' . htmlspecialchars(ucfirst($existing['status'])) . '</strong> pada jam ' . htmlspecialchars(substr($existing['jam_scan'] ?? '', 0, 5)) . ' WIB.';
         $messageType = 'warning';
         $lastScannedSiswa = $siswa;
         $lastScannedStatus = $existing['status'];
         $lastScannedJam = $existing['jam_scan'];
       } else {
+        $siswaShift = $siswa['shift'] ?? 'pagi';
         $jam = date('H:i:s');
-        $hour = (int)date('H');
-        $minute = (int)date('i');
-        if ($hour > 7 || ($hour === 7 && $minute > 0)) {
-          $status = 'terlambat';
-        }
-        $insert = $conn->prepare("INSERT INTO absensi (siswa_id, tanggal, status, jam_scan) VALUES (?, ?, ?, ?)");
-        $insert->bind_param('isss', $siswa['id'], $selectedTanggal, $status, $jam);
-        if ($insert->execute()) {
-          $message = 'Absensi berhasil dicatat untuk <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['kelas']) . ') - Status: <strong>' . htmlspecialchars(ucfirst($status)) . '</strong> (' . substr($jam, 0, 5) . ').';
-          $messageType = 'success';
-          $lastScannedSiswa = $siswa;
-          $lastScannedStatus = $status;
-          $lastScannedJam = $jam;
+        $eval = evaluateAttendanceStatus($siswaShift, $jam, $selectedTanggal);
+
+        if ($eval['is_early']) {
+          $message = 'Siswa <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($eval['rules']['label']) . ') melakukan scan pada ' . substr($jam, 0, 5) . ' WIB. ' . $eval['message'];
+          $messageType = 'warning';
         } else {
-          $message = 'Gagal menyimpan data absensi: ' . htmlspecialchars($conn->error);
-          $messageType = 'danger';
+          $status = $eval['status'];
+          $insert = $conn->prepare("INSERT INTO absensi (siswa_id, tanggal, status, shift, jam_scan) VALUES (?, ?, ?, ?, ?)");
+          $insert->bind_param('issss', $siswa['id'], $selectedTanggal, $status, $siswaShift, $jam);
+          if ($insert->execute()) {
+            $shiftLabel = $eval['rules']['label'];
+            $statusText = $status === 'hadir' ? 'Hadir Tepat Waktu' : 'Terlambat';
+            $message = 'Absensi berhasil dicatat untuk <strong>' . htmlspecialchars($siswa['nama']) . '</strong> (' . htmlspecialchars($siswa['kelas']) . ') - <strong>' . $shiftLabel . '</strong>: <strong>' . $statusText . '</strong> (' . substr($jam, 0, 5) . ' WIB).';
+            $messageType = 'success';
+            $lastScannedSiswa = $siswa;
+            $lastScannedStatus = $status;
+            $lastScannedJam = $jam;
+          } else {
+            $message = 'Gagal menyimpan data absensi: ' . htmlspecialchars($conn->error);
+            $messageType = 'danger';
+          }
         }
       }
     }
@@ -220,11 +265,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $totalScanHariIni = 0;
 $hadirHariIni = 0;
 $terlambatHariIni = 0;
+$totalPagiHariIni = 0;
+$totalSiangHariIni = 0;
 
 $countQuery = $conn->prepare("SELECT
     COUNT(*) as total,
     SUM(CASE WHEN status = 'hadir' THEN 1 ELSE 0 END) as total_hadir,
-    SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as total_terlambat
+    SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as total_terlambat,
+    SUM(CASE WHEN shift = 'pagi' THEN 1 ELSE 0 END) as total_pagi,
+    SUM(CASE WHEN shift = 'siang' THEN 1 ELSE 0 END) as total_siang
     FROM absensi WHERE tanggal = ?");
 $countQuery->bind_param('s', $selectedTanggal);
 $countQuery->execute();
@@ -233,10 +282,12 @@ if ($countResult) {
   $totalScanHariIni = (int)($countResult['total'] ?? 0);
   $hadirHariIni = (int)($countResult['total_hadir'] ?? 0);
   $terlambatHariIni = (int)($countResult['total_terlambat'] ?? 0);
+  $totalPagiHariIni = (int)($countResult['total_pagi'] ?? 0);
+  $totalSiangHariIni = (int)($countResult['total_siang'] ?? 0);
 }
 
 // Recent scans for selected date
-$stmtRecent = $conn->prepare("SELECT a.*, s.nama, s.nis, s.kelas, s.jurusan
+$stmtRecent = $conn->prepare("SELECT a.*, s.nama, s.nis, s.kelas, s.jurusan, s.shift as siswa_shift
     FROM absensi a
     JOIN siswa s ON a.siswa_id = s.id
     WHERE a.tanggal = ?
@@ -246,6 +297,9 @@ $stmtRecent->execute();
 $recentScans = $stmtRecent->get_result()->fetch_all(MYSQLI_ASSOC);
 
 $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
+$currentShift = detectCurrentShift();
+$shiftPagiRules = getShiftRules('pagi', $selectedTanggal);
+$shiftSiangRules = getShiftRules('siang', $selectedTanggal);
 ?>
 <!doctype html>
 <html lang="id">
@@ -609,12 +663,56 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
           <div class="stat-card card">
             <h6>Hadir Tepat Waktu</h6>
             <div id="statHadir" style="font-size:24px;font-weight:700;color:#059669;transition:all 0.3s"><?= $hadirHariIni ?></div>
-            <div style="color:var(--muted);font-size:12px">Sebelum 07.00</div>
+            <div style="color:var(--muted);font-size:12px">Sesuai jam shift</div>
           </div>
           <div class="stat-card card">
             <h6>Terlambat</h6>
             <div id="statTerlambat" style="font-size:24px;font-weight:700;color:#b45309;transition:all 0.3s"><?= $terlambatHariIni ?></div>
-            <div style="color:var(--muted);font-size:12px">Pukul 07.00 ke atas</div>
+            <div style="color:var(--muted);font-size:12px">Melewati batas cut-off</div>
+          </div>
+          <div class="stat-card card">
+            <h6>Shift Pagi / Siang</h6>
+            <div style="font-size:20px;font-weight:700;color:#0f172a;margin-top:2px">
+              <span id="statPagi" style="color:#0369a1"><?= $totalPagiHariIni ?></span>
+              <span style="font-size:14px;color:var(--muted);font-weight:400"> / </span>
+              <span id="statSiang" style="color:#d97706"><?= $totalSiangHariIni ?></span>
+            </div>
+            <div style="color:var(--muted);font-size:12px">Pagi vs Siang</div>
+          </div>
+        </div>
+
+        <!-- Shift Schedule Quick Information Box -->
+        <div class="card mb-3" style="border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;padding:14px 18px">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div style="font-size:13px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:6px">
+              <span>⏱️</span>
+              <span>Jadwal Jam Absensi & Sekolah (<?= htmlspecialchars($shiftPagiRules['hari']) ?>)</span>
+            </div>
+            <div>
+              <span class="badge" style="background:<?= $currentShift === 'siang' ? '#fef3c7' : '#e0f2fe' ?>;color:<?= $currentShift === 'siang' ? '#b45309' : '#0369a1' ?>;font-size:12px;padding:5px 12px;border:1px solid <?= $currentShift === 'siang' ? '#fde68a' : '#bae6fd' ?>">
+                Shift Berjalan: <strong><?= $currentShift === 'siang' ? '☀️ Shift Siang' : '🌅 Shift Pagi' ?></strong>
+              </span>
+            </div>
+          </div>
+          <div class="row g-2" style="font-size:12px">
+            <div class="col-md-6">
+              <div style="background:#fff;padding:10px 12px;border-radius:8px;border:1px solid #e0f2fe">
+                <div style="font-weight:700;color:#0369a1;margin-bottom:3px">🌅 SHIFT PAGI</div>
+                <div style="color:#334155">
+                  • Absen Dibuka: <strong>06.00 WIB</strong> &nbsp;|&nbsp; Batas Masuk: <strong>07.00 WIB</strong><br>
+                  • Jam Pulang: <strong><?= $shiftPagiRules['jam_pulang_str'] ?></strong> (<?= $shiftPagiRules['is_friday'] ? "Jum'at 10.00" : "Senin-Kamis 12.00" ?>)
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div style="background:#fff;padding:10px 12px;border-radius:8px;border:1px solid #fef3c7">
+                <div style="font-weight:700;color:#b45309;margin-bottom:3px">☀️ SHIFT SIANG</div>
+                <div style="color:#334155">
+                  • Absen Dibuka: <strong>12.00 WIB</strong> &nbsp;|&nbsp; Batas Masuk: <strong><?= $shiftSiangRules['jam_masuk_str'] ?></strong> (<?= $shiftSiangRules['is_friday'] ? "Jum'at 13.00" : "Senin-Kamis 12.30" ?>)<br>
+                  • Jam Pulang: <strong>17.00 WIB</strong> (5 Sore)
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -684,9 +782,9 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
                         <input type="date" name="tanggal" id="tanggalInput" class="form-control" value="<?= htmlspecialchars($selectedTanggal) ?>" required>
                       </div>
                       <div class="col-md-6">
-                        <label class="form-label" style="font-weight:600;font-size:13px">Status Jam Masuk</label>
-                        <div class="form-control" style="background:#f8fafc;color:#475569;font-size:13px">
-                          Batas waktu hadir: <strong>07.00 WIB</strong>
+                        <label class="form-label" style="font-weight:600;font-size:13px">Ketentuan Jam Masuk Shift</label>
+                        <div class="form-control" style="background:#f8fafc;color:#475569;font-size:12px;height:auto">
+                          🌅 <strong>Pagi</strong>: 06.00 - 07.00 &nbsp;|&nbsp; ☀️ <strong>Siang</strong>: 12.00 - <?= $shiftSiangRules['jam_masuk_str'] ?>
                         </div>
                       </div>
                     </div>
@@ -810,6 +908,8 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
                     <?php foreach ($recentScans as $r):
                       $sclass = strtolower(str_replace(' ', '', $r['status']));
                       $jamScanFormatted = !empty($r['jam_scan']) ? substr($r['jam_scan'], 0, 5) : '-';
+                      $rShift = ($r['shift'] ?? ($r['siswa_shift'] ?? 'pagi')) === 'siang' ? '☀️ Siang' : '🌅 Pagi';
+                      $rShiftBadge = ($r['shift'] ?? ($r['siswa_shift'] ?? 'pagi')) === 'siang' ? 'background:#fef3c7;color:#b45309;border:1px solid #fde68a' : 'background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd';
                     ?>
                       <div class="recent-item" style="padding:10px 0">
                         <div class="avatar" style="width:34px;height:34px;font-size:13px;font-weight:700">
@@ -819,15 +919,16 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
                           <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
                             <?= htmlspecialchars($r['nama']) ?>
                           </div>
-                          <div style="font-size:11px;color:var(--muted)">
-                            NIS: <?= htmlspecialchars($r['nis']) ?> · <?= htmlspecialchars($r['kelas']) ?>
+                          <div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:2px">
+                            <span>NIS: <?= htmlspecialchars($r['nis']) ?> · <?= htmlspecialchars($r['kelas']) ?></span>
+                            <span class="badge" style="<?= $rShiftBadge ?>;font-size:10px;padding:2px 6px"><?= $rShift ?></span>
                           </div>
                         </div>
                         <div style="text-align:right">
                           <span class="tag <?= htmlspecialchars($sclass) ?>" style="font-size:11px;padding:3px 8px">
                             <?= htmlspecialchars(ucfirst($r['status'])) ?>
                           </span>
-                          <div style="font-size:11px;color:var(--muted);margin-top:2px"><?= htmlspecialchars($jamScanFormatted) ?></div>
+                          <div style="font-size:11px;color:var(--muted);margin-top:2px"><?= htmlspecialchars($jamScanFormatted) ?> WIB</div>
                         </div>
                       </div>
                     <?php endforeach; ?>
@@ -842,7 +943,8 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
                 <li>Gunakan <strong>Kamera Device</strong> untuk scan langsung dari kartu siswa atau smartphone.</li>
                 <li>Gunakan tab <strong>Scanner / Manual</strong> jika menggunakan scanner barcode USB genggam.</li>
                 <li>Setelah barcode terbaca dan valid, absensi otomatis diterima & disimpan.</li>
-                <li>Status <strong>Hadir</strong> sebelum pukul 07.00, atau <strong>Terlambat</strong> setelah pukul 07.00.</li>
+                <li><strong>Shift Pagi</strong>: Buka 06.00 WIB, batas tepat waktu 07.00 WIB.</li>
+                <li><strong>Shift Siang</strong>: Buka 12.00 WIB, batas tepat waktu 12.30 WIB (Jum'at 13.00 WIB).</li>
               </ul>
             </div>
           </aside>
@@ -990,6 +1092,9 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
         const statusClass = (absensi.status || 'hadir').toLowerCase().replace(/\s+/g, '');
         const statusLabel = absensi.status ? absensi.status.charAt(0).toUpperCase() + absensi.status.slice(1) : 'Hadir';
         const jamText = absensi.jam_scan ? escapeHtml(absensi.jam_scan) : '-';
+        const shiftType = (siswa.shift || absensi.shift || 'pagi').toLowerCase();
+        const shiftLabel = shiftType === 'siang' ? '☀️ Shift Siang' : '🌅 Shift Pagi';
+        const shiftBadgeStyle = shiftType === 'siang' ? 'background:#fef3c7;color:#b45309;border:1px solid #fde68a' : 'background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd';
 
         let bgAvatar = '#dcfce7';
         let colorAvatar = '#15803d';
@@ -1014,7 +1119,10 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
               ${initial}
             </div>
             <div style="flex:1">
-              <div style="font-weight:700;font-size:16px;color:#1e293b">${escapeHtml(siswa.nama)}</div>
+              <div style="font-weight:700;font-size:16px;color:#1e293b;display:flex;align-items:center;gap:8px">
+                <span>${escapeHtml(siswa.nama)}</span>
+                <span class="badge" style="${shiftBadgeStyle};font-size:11px;font-weight:600">${shiftLabel}</span>
+              </div>
               <div style="font-size:13px;color:#475569">
                 NIS: ${escapeHtml(siswa.nis)} · Kelas: ${escapeHtml(siswa.kelas)} ${jurusanText}
               </div>
@@ -1023,7 +1131,7 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
               <span class="tag ${statusClass}" style="font-size:13px;padding:6px 14px">
                 ${statusLabel}
               </span>
-              <div style="font-size:12px;color:#64748b;margin-top:4px">Jam: ${jamText}</div>
+              <div style="font-size:12px;color:#64748b;margin-top:4px">Jam: ${jamText} WIB</div>
             </div>
           </div>
         `;
@@ -1035,6 +1143,10 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
         if (statTotal && stats.total !== undefined) statTotal.textContent = stats.total;
         if (statHadir && stats.hadir !== undefined) statHadir.textContent = stats.hadir;
         if (statTerlambat && stats.terlambat !== undefined) statTerlambat.textContent = stats.terlambat;
+        const statPagi = document.getElementById('statPagi');
+        const statSiang = document.getElementById('statSiang');
+        if (statPagi && stats.pagi !== undefined) statPagi.textContent = stats.pagi;
+        if (statSiang && stats.siang !== undefined) statSiang.textContent = stats.siang;
       }
 
       // Prepend newly scanned record to recent list dynamically
@@ -1049,6 +1161,9 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
         const statusClass = (absensi.status || 'hadir').toLowerCase().replace(/\s+/g, '');
         const statusLabel = absensi.status ? absensi.status.charAt(0).toUpperCase() + absensi.status.slice(1) : 'Hadir';
         const jamText = absensi.jam_scan ? escapeHtml(absensi.jam_scan) : '-';
+        const shiftType = (siswa.shift || absensi.shift || 'pagi').toLowerCase();
+        const shiftLabel = shiftType === 'siang' ? '☀️ Siang' : '🌅 Pagi';
+        const shiftBadgeStyle = shiftType === 'siang' ? 'background:#fef3c7;color:#b45309;border:1px solid #fde68a' : 'background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd';
 
         const itemDiv = document.createElement('div');
         itemDiv.className = 'recent-item recent-item-enter';
@@ -1061,15 +1176,16 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
             <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               ${escapeHtml(siswa.nama)}
             </div>
-            <div style="font-size:11px;color:var(--muted)">
-              NIS: ${escapeHtml(siswa.nis)} · ${escapeHtml(siswa.kelas)}
+            <div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:2px">
+              <span>NIS: ${escapeHtml(siswa.nis)} · ${escapeHtml(siswa.kelas)}</span>
+              <span class="badge" style="${shiftBadgeStyle};font-size:10px;padding:2px 6px">${shiftLabel}</span>
             </div>
           </div>
           <div style="text-align:right">
             <span class="tag ${statusClass}" style="font-size:11px;padding:3px 8px">
               ${statusLabel}
             </span>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">${jamText}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${jamText} WIB</div>
           </div>
         `;
 
@@ -1159,21 +1275,23 @@ $selectedHoliday = getHolidayInfo($selectedTanggal, $conn);
               if (continuousCheck && !continuousCheck.checked && typeof stopCameraScanner === 'function') {
                 stopCameraScanner();
               }
-            } else if (data.already_scanned) {
-              // WARNING - Already scanned today
+            } else if (data.already_scanned || data.is_early) {
+              // WARNING - Already scanned today or early
               playChime('warning');
               if (cameraWrapper) {
                 cameraWrapper.classList.add('scan-warning');
                 setTimeout(() => cameraWrapper.classList.remove('scan-warning'), 1400);
               }
               showAlert('warning', data.message);
-              showStudentCard(data.siswa, data.absensi, 'warning');
+              if (data.siswa) {
+                showStudentCard(data.siswa, data.absensi || { status: 'belum_buka', jam_scan: new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) }, 'warning');
+              }
               updateLiveStats(data.stats);
 
               if (cameraStatusBadge) {
                 cameraStatusBadge.innerHTML = `
                 <span style="color:#f59e0b;font-size:14px">⚠</span>
-                <span>Sudah Absen Hari Ini: <strong>${escapeHtml(data.siswa.nama)}</strong></span>
+                <span>${escapeHtml(data.message.replace(/<[^>]*>?/gm, ''))}</span>
               `;
               }
             } else {

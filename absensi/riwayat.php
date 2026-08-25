@@ -53,6 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $id = (int)($_POST['id'] ?? 0);
     $tanggal = trim($_POST['tanggal'] ?? '');
     $status = trim($_POST['status'] ?? 'hadir');
+    $shift = trim($_POST['shift'] ?? 'pagi');
+    if ($shift !== 'siang') $shift = 'pagi';
 
     $allowedStatus = ['hadir', 'terlambat', 'izin', 'sakit', 'alpa'];
 
@@ -91,8 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
           $message = 'Absensi untuk siswa ini sudah ada pada tanggal ' . htmlspecialchars($tanggal) . '.';
           $messageType = 'warning';
         } else {
-          $update = $conn->prepare("UPDATE absensi SET tanggal = ?, status = ? WHERE id = ?");
-          $update->bind_param('ssi', $tanggal, $status, $id);
+          $update = $conn->prepare("UPDATE absensi SET tanggal = ?, status = ?, shift = ? WHERE id = ?");
+          $update->bind_param('sssi', $tanggal, $status, $shift, $id);
           if ($update->execute()) {
             $message = 'Data absensi berhasil diperbarui.';
             $messageType = 'success';
@@ -109,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $search = trim($_GET['search'] ?? '');
 $kelasFilter = trim($_GET['kelas'] ?? '');
 $statusFilter = trim($_GET['status'] ?? '');
+$shiftFilter = trim($_GET['shift'] ?? '');
 
 $sql = "SELECT a.*, s.nis, s.nama, s.kelas FROM absensi a JOIN siswa s ON a.siswa_id = s.id WHERE 1=1";
 $params = [];
@@ -128,6 +131,11 @@ if ($kelasFilter !== '') {
 if ($statusFilter !== '') {
   $sql .= " AND a.status = ?";
   $params[] = $statusFilter;
+  $types .= 's';
+}
+if ($shiftFilter !== '') {
+  $sql .= " AND a.shift = ?";
+  $params[] = $shiftFilter;
   $types .= 's';
 }
 
@@ -237,7 +245,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
           <?php endif; ?>
 
           <form method="get" class="row g-2 mb-3">
-            <div class="col-md-5"><input type="text" name="search" class="form-control" placeholder="Cari nama / NIS..." value="<?= htmlspecialchars($search) ?>"></div>
+            <div class="col-md-4"><input type="text" name="search" class="form-control" placeholder="Cari nama / NIS..." value="<?= htmlspecialchars($search) ?>"></div>
             <div class="col-md-2">
               <select name="kelas" class="form-select">
                 <option value="">Semua Kelas</option>
@@ -248,6 +256,13 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
               <select name="status" class="form-select">
                 <option value="">Semua Status</option>
                 <?php foreach ($statusList as $s): ?><option value="<?= htmlspecialchars($s['status']) ?>" <?= $statusFilter === $s['status'] ? 'selected' : '' ?>><?= htmlspecialchars($s['status']) ?></option><?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <select name="shift" class="form-select">
+                <option value="">Semua Shift</option>
+                <option value="pagi" <?= $shiftFilter === 'pagi' ? 'selected' : '' ?>>🌅 Shift Pagi</option>
+                <option value="siang" <?= $shiftFilter === 'siang' ? 'selected' : '' ?>>☀️ Shift Siang</option>
               </select>
             </div>
             <div class="col-md-1"><button class="btn btn-primary w-100">Filter</button></div>
@@ -264,6 +279,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
                     <th>NIS</th>
                     <th>Nama</th>
                     <th>Kelas</th>
+                    <th>Shift</th>
                     <th>Status</th>
                     <th>Aksi</th>
                   </tr>
@@ -271,12 +287,13 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
                 <tbody>
                   <?php if (empty($absensiList)): ?>
                     <tr>
-                      <td colspan="7" class="text-center py-4 text-muted">Tidak ada data absensi ditemukan.</td>
+                      <td colspan="8" class="text-center py-4 text-muted">Tidak ada data absensi ditemukan.</td>
                     </tr>
                   <?php else: ?>
                     <?php foreach ($absensiList as $a):
                       $jamValue = !empty($a['jam_scan']) ? substr($a['jam_scan'], 0, 8) : (!empty($a['created_at']) ? substr($a['created_at'], 11, 8) : '');
                       $jamDisplay = $jamValue ? substr($jamValue, 0, 5) : '-';
+                      $ashift = ($a['shift'] ?? 'pagi') === 'siang' ? 'siang' : 'pagi';
                     ?>
                       <tr>
                         <td><?= htmlspecialchars($a['tanggal']) ?></td>
@@ -284,6 +301,13 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
                         <td><?= htmlspecialchars($a['nis']) ?></td>
                         <td><?= htmlspecialchars($a['nama']) ?></td>
                         <td><?= htmlspecialchars($a['kelas']) ?></td>
+                        <td>
+                          <?php if ($ashift === 'siang'): ?>
+                            <span class="badge" style="background:#fef3c7;color:#b45309;font-weight:600;border:1px solid #fde68a">☀️ Siang</span>
+                          <?php else: ?>
+                            <span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:600;border:1px solid #bae6fd">🌅 Pagi</span>
+                          <?php endif; ?>
+                        </td>
                         <td><span class="tag <?= strtolower(str_replace(' ', '', $a['status'])) ?>"><?= htmlspecialchars($a['status']) ?></span></td>
                         <td>
                           <button type="button" class="btn btn-sm btn-outline-primary btn-edit-absensi"
@@ -292,15 +316,17 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
                             data-nis="<?= htmlspecialchars($a['nis']) ?>"
                             data-kelas="<?= htmlspecialchars($a['kelas']) ?>"
                             data-tanggal="<?= htmlspecialchars($a['tanggal']) ?>"
+                            data-shift="<?= $ashift ?>"
                             data-status="<?= htmlspecialchars($a['status']) ?>">
                             Edit
                           </button>
                           <?php if ($_SESSION['role'] === 'admin'): ?>
-                            <form action="delete.php" method="post" style="display:inline" onsubmit="return confirm('Hapus data absensi ini?')">
-                              <input type="hidden" name="id" value="<?= $a['id'] ?>">
-                              <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                              <button type="submit" class="btn btn-sm btn-danger">Hapus</button>
-                            </form>
+                            <button type="button" class="btn btn-sm btn-danger btn-delete-absensi"
+                              data-id="<?= $a['id'] ?>"
+                              data-nama="<?= htmlspecialchars($a['nama']) ?>"
+                              data-tanggal="<?= htmlspecialchars(formatTanggalIndo($a['tanggal'], true)) ?>">
+                              Hapus
+                            </button>
                           <?php endif; ?>
                         </td>
                       </tr>
@@ -346,6 +372,21 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
               <input type="date" name="tanggal" id="edit_tanggal" class="form-control" required>
             </div>
 
+            <!-- Shift Absensi -->
+            <div class="mb-3">
+              <label class="form-label" style="font-weight:600;font-size:13px">Shift Absensi</label>
+              <div style="display:flex;gap:12px">
+                <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+                  <input type="radio" name="shift" id="edit_shift_pagi" value="pagi" style="margin-right:6px">
+                  <strong>🌅 Shift Pagi</strong>
+                </label>
+                <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+                  <input type="radio" name="shift" id="edit_shift_siang" value="siang" style="margin-right:6px">
+                  <strong>☀️ Shift Siang</strong>
+                </label>
+              </div>
+            </div>
+
             <!-- Status Kehadiran -->
             <div class="mb-2">
               <label class="form-label" style="font-weight:600;font-size:13px">Status Kehadiran</label>
@@ -376,6 +417,31 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
           <div class="modal-footer" style="padding:12px 20px;background:#f8fafc;border-top:1px solid rgba(15,23,42,0.06)">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
             <button type="submit" class="btn btn-primary" style="font-weight:600">Simpan Perubahan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Konfirmasi Hapus Absensi (Simpel & Elegan) -->
+  <div class="modal fade" id="modalDeleteAbsensi" tabindex="-1" aria-labelledby="modalDeleteAbsensiLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 380px;">
+      <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 40px rgba(0,0,0,0.15); overflow: hidden;">
+        <div class="modal-body text-center p-4">
+          <div style="width: 52px; height: 52px; border-radius: 50%; background: #fee2e2; color: #ef4444; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 12px;">
+            🗑️
+          </div>
+          <h6 style="font-weight: 700; font-size: 16px; color: #1e293b; margin-bottom: 6px;">Hapus Catatan Absensi</h6>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">
+            Apakah Anda yakin ingin menghapus absensi siswa <strong id="deleteAbsensiNama" class="text-dark">-</strong> pada <span id="deleteAbsensiTanggal">-</span>? Tindakan ini tidak dapat dibatalkan.
+          </p>
+        </div>
+        <form action="delete.php" method="post" id="formDeleteAbsensi" style="margin:0">
+          <input type="hidden" name="id" id="deleteAbsensiId" value="">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+          <div class="modal-footer d-flex justify-content-center gap-2 p-3" style="background: #f8fafc; border-top: 1px solid #f1f5f9;">
+            <button type="button" class="btn btn-light border px-4 btn-sm" data-bs-dismiss="modal" style="font-weight: 600;">Batal</button>
+            <button type="submit" class="btn btn-danger px-4 btn-sm" style="font-weight: 600;">Ya, Hapus</button>
           </div>
         </form>
       </div>
@@ -418,12 +484,22 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
           const nis = this.getAttribute('data-nis');
           const kelas = this.getAttribute('data-kelas');
           const tanggal = this.getAttribute('data-tanggal');
+          const shift = this.getAttribute('data-shift') || 'pagi';
           const status = this.getAttribute('data-status');
 
           editIdInput.value = id;
           editNamaDisplay.textContent = nama;
           editMetaDisplay.textContent = 'NIS: ' + nis + (kelas ? ' · Kelas: ' + kelas : '');
           editTanggalInput.value = tanggal;
+
+          // Set radio shift
+          if (shift === 'siang') {
+            const rSiang = document.getElementById('edit_shift_siang');
+            if (rSiang) rSiang.checked = true;
+          } else {
+            const rPagi = document.getElementById('edit_shift_pagi');
+            if (rPagi) rPagi.checked = true;
+          }
 
           // Set radio status
           const targetRadio = modalEl.querySelector('input[name="status"][value="' + status + '"]');
@@ -438,6 +514,30 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
           modal.show();
         });
       });
+
+      // Handle klik tombol Hapus pada baris tabel (Modal Konfirmasi Hapus)
+      const modalDeleteEl = document.getElementById('modalDeleteAbsensi');
+      if (modalDeleteEl) {
+        const modalDelete = new bootstrap.Modal(modalDeleteEl);
+        const deleteButtons = document.querySelectorAll('.btn-delete-absensi');
+        const deleteAbsensiId = document.getElementById('deleteAbsensiId');
+        const deleteAbsensiNama = document.getElementById('deleteAbsensiNama');
+        const deleteAbsensiTanggal = document.getElementById('deleteAbsensiTanggal');
+
+        deleteButtons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            const nama = this.getAttribute('data-nama');
+            const tanggal = this.getAttribute('data-tanggal');
+
+            deleteAbsensiId.value = id;
+            deleteAbsensiNama.textContent = nama;
+            deleteAbsensiTanggal.textContent = tanggal;
+
+            modalDelete.show();
+          });
+        });
+      }
     });
   </script>
   <script src="../assets/main.js?v=1.4"></script>

@@ -39,6 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $tanggal = trim($_POST['tanggal'] ?? '');
         $status = trim($_POST['status'] ?? 'hadir');
+        $shift = trim($_POST['shift'] ?? 'pagi');
+        if ($shift !== 'siang') $shift = 'pagi';
         $allowedStatus = ['hadir', 'terlambat', 'izin', 'sakit', 'alpa'];
 
         $holidayInfo = getHolidayInfo($tanggal, $conn);
@@ -56,8 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($dup->get_result()->num_rows > 0) {
                 $message = 'Absensi untuk siswa ini sudah ada pada tanggal ' . htmlspecialchars($tanggal) . '.';
             } else {
-                $update = $conn->prepare("UPDATE absensi SET tanggal = ?, status = ? WHERE id = ?");
-                $update->bind_param('ssi', $tanggal, $status, $id);
+                $update = $conn->prepare("UPDATE absensi SET tanggal = ?, status = ?, shift = ? WHERE id = ?");
+                $update->bind_param('sssi', $tanggal, $status, $shift, $id);
                 if ($update->execute()) {
                     header('Location: riwayat.php?msg=updated');
                     exit;
@@ -180,6 +182,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <div class="mb-3">
                                     <label class="form-label" style="font-weight:600">Tanggal Absensi</label>
                                     <input type="date" name="tanggal" class="form-control" value="<?= htmlspecialchars($absensi['tanggal']) ?>" required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label" style="font-weight:600">Shift Absensi</label>
+                                    <div style="display:flex;gap:12px">
+                                        <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+                                            <input type="radio" name="shift" value="pagi" <?= ($absensi['shift'] ?? 'pagi') === 'pagi' ? 'checked' : '' ?> style="margin-right:6px">
+                                            <strong>🌅 Shift Pagi</strong>
+                                        </label>
+                                        <label style="flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;cursor:pointer;background:#f8fafc;font-size:13px">
+                                            <input type="radio" name="shift" value="siang" <?= ($absensi['shift'] ?? 'pagi') === 'siang' ? 'checked' : '' ?> style="margin-right:6px">
+                                            <strong>☀️ Shift Siang</strong>
+                                        </label>
+                                    </div>
                                 </div>
 
                                 <div class="mb-4">

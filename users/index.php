@@ -148,7 +148,7 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
             <div style="font-size:13px;color:rgba(255,255,255,0.7)">Kelola akun pengguna</div>
           </div>
           <div>
-            <button class="btn btn-primary" onclick="document.getElementById('userModal').style.display='flex'">+ Tambah Pengguna</button>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#userModal">+ Tambah Pengguna</button>
           </div>
         </div>
 
@@ -189,7 +189,9 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
                             Hapus
                           </button>
                         <?php else: ?>
-                          <a href="delete.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Apakah Anda yakin ingin menghapus pengguna <?= htmlspecialchars($u['username']) ?>?')">Hapus</a>
+                          <button type="button" class="btn btn-sm btn-danger btn-delete-user" data-id="<?= $u['id'] ?>" data-username="<?= htmlspecialchars($u['username']) ?>">
+                            Hapus
+                          </button>
                         <?php endif; ?>
                       </td>
                     </tr>
@@ -203,28 +205,91 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
     </main>
   </div>
 
-  <!-- Modal Tambah Pengguna -->
-  <div id="userModal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;z-index:9999">
-    <div style="background:#fff;padding:20px;border-radius:12px;width:340px">
-      <h6>Tambah Pengguna <a href="#" onclick="document.getElementById('userModal').style.display='none'" style="float:right;color:#94a3b8">×</a></h6>
-      <form method="post">
-        <div style="margin-top:10px"><label>Nama</label><input type="text" name="name" class="form-control" placeholder="Nama lengkap"></div>
-        <div style="margin-top:10px"><label>Username</label><input type="text" name="username" class="form-control" placeholder="username" required></div>
-        <div style="margin-top:10px"><label>Password</label><input type="password" name="password" class="form-control" placeholder="Password" required></div>
-        <div style="margin-top:10px"><label>Role</label><select name="role" class="form-select">
-            <option value="guru">Guru</option>
-            <option value="admin">Admin</option>
-          </select></div>
-        <div style="display:flex;gap:8px;margin-top:12px;justify-content:space-between">
-          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('userModal').style.display='none'">Batal</button>
-          <button class="btn btn-primary">Simpan</button>
+  <!-- Modal Tambah Pengguna (Bootstrap 5 Animated Modal) -->
+  <div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 380px;">
+      <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 40px rgba(0,0,0,0.15); overflow: hidden;">
+        <div class="modal-header" style="background:#0f172a; color:#fff; padding: 14px 18px;">
+          <h6 class="modal-title mb-0" id="userModalLabel" style="font-weight: 700; font-size: 15px;">➕ Tambah Pengguna</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-      </form>
+        <form method="post">
+          <div class="modal-body" style="padding: 18px;">
+            <div class="mb-2">
+              <label class="form-label" style="font-weight: 600; font-size: 13px;">Nama Lengkap</label>
+              <input type="text" name="name" class="form-control" placeholder="Nama lengkap">
+            </div>
+            <div class="mb-2">
+              <label class="form-label" style="font-weight: 600; font-size: 13px;">Username</label>
+              <input type="text" name="username" class="form-control" placeholder="username" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label" style="font-weight: 600; font-size: 13px;">Password</label>
+              <input type="password" name="password" class="form-control" placeholder="Password" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label" style="font-weight: 600; font-size: 13px;">Role</label>
+              <select name="role" class="form-select">
+                <option value="guru">Guru / Petugas</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer d-flex justify-content-end gap-2 p-3" style="background: #f8fafc; border-top: 1px solid #f1f5f9;">
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Batal</button>
+            <button type="submit" class="btn btn-primary btn-sm px-4" style="font-weight: 600;">Simpan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Konfirmasi Hapus Pengguna (Simpel & Elegan) -->
+  <div class="modal fade" id="modalDeleteUser" tabindex="-1" aria-labelledby="modalDeleteUserLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 380px;">
+      <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 40px rgba(0,0,0,0.15); overflow: hidden;">
+        <div class="modal-body text-center p-4">
+          <div style="width: 52px; height: 52px; border-radius: 50%; background: #fee2e2; color: #ef4444; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 12px;">
+            🗑️
+          </div>
+          <h6 style="font-weight: 700; font-size: 16px; color: #1e293b; margin-bottom: 6px;">Hapus Pengguna</h6>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">
+            Apakah Anda yakin ingin menghapus akun pengguna <strong id="deleteUsernameText" class="text-dark">-</strong>? Tindakan ini tidak dapat dibatalkan.
+          </p>
+        </div>
+        <div class="modal-footer d-flex justify-content-center gap-2 p-3" style="background: #f8fafc; border-top: 1px solid #f1f5f9;">
+          <button type="button" class="btn btn-light border px-4 btn-sm" data-bs-dismiss="modal" style="font-weight: 600;">Batal</button>
+          <a href="#" id="confirmDeleteUserBtn" class="btn btn-danger px-4 btn-sm" style="font-weight: 600;">Ya, Hapus</a>
+        </div>
+      </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/main.js?v=1.4"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const modalDeleteEl = document.getElementById('modalDeleteUser');
+      if (modalDeleteEl) {
+        const modalDelete = new bootstrap.Modal(modalDeleteEl);
+        const deleteButtons = document.querySelectorAll('.btn-delete-user');
+        const deleteUsernameText = document.getElementById('deleteUsernameText');
+        const confirmDeleteUserBtn = document.getElementById('confirmDeleteUserBtn');
+
+        deleteButtons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            const username = this.getAttribute('data-username');
+
+            deleteUsernameText.textContent = username;
+            confirmDeleteUserBtn.href = 'delete.php?id=' + encodeURIComponent(id);
+
+            modalDelete.show();
+          });
+        });
+      }
+    });
+  </script>
 </body>
 
 </html>

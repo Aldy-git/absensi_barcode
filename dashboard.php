@@ -12,11 +12,23 @@ $role = $_SESSION['role'];
 $todayHoliday = getHolidayInfo(date('Y-m-d'), $conn);
 
 $totalSiswa = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM siswa"))['total'];
+$totalSiswaPagi = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM siswa WHERE shift = 'pagi' AND status = 'aktif'"))['total'] ?? 0;
+$totalSiswaSiang = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM siswa WHERE shift = 'siang' AND status = 'aktif'"))['total'] ?? 0;
+
 $hadirHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND status = 'hadir'"))['total'];
 $terlambatHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND status = 'terlambat'"))['total'];
 $izinHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND status = 'izin'"))['total'];
 $sakitHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND status = 'sakit'"))['total'];
 $alpaHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND status = 'alpa'"))['total'];
+
+$pagiHadirHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND shift = 'pagi' AND status = 'hadir'"))['total'] ?? 0;
+$pagiTerlambatHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND shift = 'pagi' AND status = 'terlambat'"))['total'] ?? 0;
+$siangHadirHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND shift = 'siang' AND status = 'hadir'"))['total'] ?? 0;
+$siangTerlambatHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND shift = 'siang' AND status = 'terlambat'"))['total'] ?? 0;
+
+$currentShift = detectCurrentShift();
+$shiftPagiRules = getShiftRules('pagi', date('Y-m-d'));
+$shiftSiangRules = getShiftRules('siang', date('Y-m-d'));
 
 // Rekap 7 hari terakhir per status
 $labels = [];
@@ -127,7 +139,7 @@ $alpa_js = json_encode(array_values($alpaData));
         <div class="top-hero">
           <div>
             <div style="font-size:13px;color:rgba(255,255,255,0.7)">Total Siswa Aktif</div>
-            <div style="font-size:28px;font-weight:700;"><?= $totalSiswa ?></div>
+            <div style="font-size:28px;font-weight:700;"><?= $totalSiswa ?> <span style="font-size:13px;font-weight:400;opacity:0.85">(🌅 <?= $totalSiswaPagi ?> Pagi · ☀️ <?= $totalSiswaSiang ?> Siang)</span></div>
           </div>
           <div style="text-align:right;color:rgba(255,255,255,0.85)">
             <?php if ($todayHoliday): ?>
@@ -135,7 +147,7 @@ $alpa_js = json_encode(array_values($alpaData));
               <div style="font-size:18px;font-weight:700;color:#fde047"><?= htmlspecialchars($todayHoliday['nama']) ?></div>
             <?php else: ?>
               <div style="font-size:13px">Absensi hari ini</div>
-              <div style="font-size:20px;font-weight:700"><?= $hadirHariIni ?> siswa</div>
+              <div style="font-size:20px;font-weight:700"><?= $hadirHariIni + $terlambatHariIni ?> / <?= $totalSiswa ?> siswa</div>
             <?php endif; ?>
           </div>
         </div>
@@ -151,19 +163,46 @@ $alpa_js = json_encode(array_values($alpaData));
 
         <div class="stats-grid">
           <div class="stat-card card">
-            <h6>Hadir</h6>
+            <h6>Hadir Tepat Waktu</h6>
             <div style="font-size:22px;font-weight:700;color:#059669"><?= $hadirHariIni ?></div>
-            <div style="color:var(--muted);font-size:13px">Hari ini</div>
+            <div style="color:var(--muted);font-size:12px;margin-top:2px">🌅 Pagi: <?= $pagiHadirHariIni ?> · ☀️ Siang: <?= $siangHadirHariIni ?></div>
           </div>
           <div class="stat-card card">
             <h6>Terlambat</h6>
             <div style="font-size:22px;font-weight:700;color:#b45309"><?= $terlambatHariIni ?></div>
-            <div style="color:var(--muted);font-size:13px">Hari ini</div>
+            <div style="color:var(--muted);font-size:12px;margin-top:2px">🌅 Pagi: <?= $pagiTerlambatHariIni ?> · ☀️ Siang: <?= $siangTerlambatHariIni ?></div>
           </div>
           <div class="stat-card card">
-            <h6>Izin</h6>
-            <div style="font-size:22px;font-weight:700;color:#0ea5a0"><?= $izinHariIni ?></div>
-            <div style="color:var(--muted);font-size:13px">Hari ini</div>
+            <h6>Izin / Sakit / Alpa</h6>
+            <div style="font-size:22px;font-weight:700;color:#0ea5a0"><?= $izinHariIni + $sakitHariIni + $alpaHariIni ?></div>
+            <div style="color:var(--muted);font-size:12px;margin-top:2px">Izin: <?= $izinHariIni ?> · Sakit: <?= $sakitHariIni ?> · Alpa: <?= $alpaHariIni ?></div>
+          </div>
+        </div>
+
+        <!-- Shift Schedule Quick Widget -->
+        <div class="card mb-3" style="border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;padding:12px 16px">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div style="font-size:13px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:6px">
+              <span>⏱️</span>
+              <span>Jadwal Absensi Shift Sekolah (<?= htmlspecialchars($shiftPagiRules['hari']) ?>)</span>
+            </div>
+            <div>
+              <span class="badge" style="background:<?= $currentShift === 'siang' ? '#fef3c7' : '#e0f2fe' ?>;color:<?= $currentShift === 'siang' ? '#b45309' : '#0369a1' ?>;font-size:11px;padding:4px 10px;border:1px solid <?= $currentShift === 'siang' ? '#fde68a' : '#bae6fd' ?>">
+                Shift Sekarang: <strong><?= $currentShift === 'siang' ? '☀️ Shift Siang' : '🌅 Shift Pagi' ?></strong>
+              </span>
+            </div>
+          </div>
+          <div class="row g-2" style="font-size:12px">
+            <div class="col-md-6">
+              <div style="background:#fff;padding:8px 12px;border-radius:8px;border:1px solid #e0f2fe">
+                <span style="font-weight:700;color:#0369a1">🌅 Shift Pagi</span>: Buka <strong>06.00</strong> &nbsp;|&nbsp; Masuk <strong>07.00</strong> &nbsp;|&nbsp; Pulang <strong><?= $shiftPagiRules['jam_pulang_str'] ?></strong>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div style="background:#fff;padding:8px 12px;border-radius:8px;border:1px solid #fef3c7">
+                <span style="font-weight:700;color:#b45309">☀️ Shift Siang</span>: Buka <strong>12.00</strong> &nbsp;|&nbsp; Masuk <strong><?= $shiftSiangRules['jam_masuk_str'] ?></strong> &nbsp;|&nbsp; Pulang <strong>17.00 WIB</strong>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -185,16 +224,21 @@ $alpa_js = json_encode(array_values($alpaData));
             <div class="recent-list" style="margin-top:12px">
               <h6>Absensi Terbaru</h6>
               <?php
-                $recent = $conn->query("SELECT a.*, s.nama FROM absensi a JOIN siswa s ON a.siswa_id = s.id ORDER BY a.id DESC LIMIT 6")->fetch_all(MYSQLI_ASSOC);
+                $recent = $conn->query("SELECT a.*, s.nama, s.shift as siswa_shift FROM absensi a JOIN siswa s ON a.siswa_id = s.id ORDER BY a.id DESC LIMIT 6")->fetch_all(MYSQLI_ASSOC);
               ?>
               <?php foreach ($recent as $r):
                 $sclass = strtolower(str_replace(' ','', $r['status']));
+                $rShift = ($r['shift'] ?? ($r['siswa_shift'] ?? 'pagi')) === 'siang' ? '☀️ Siang' : '🌅 Pagi';
+                $rShiftBadge = ($r['shift'] ?? ($r['siswa_shift'] ?? 'pagi')) === 'siang' ? 'background:#fef3c7;color:#b45309;border:1px solid #fde68a' : 'background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd';
               ?>
                 <div class="recent-item">
                   <div class="avatar"><?= strtoupper(substr($r['nama'],0,1)) ?></div>
                   <div style="flex:1">
-                    <div style="font-weight:700"><?= htmlspecialchars($r['nama']) ?></div>
-                    <div style="font-size:12px;color:var(--muted)"><?= htmlspecialchars($r['tanggal']) ?> · <?= htmlspecialchars($r['jam_scan']) ?></div>
+                    <div style="font-weight:700;display:flex;align-items:center;gap:6px">
+                      <span><?= htmlspecialchars($r['nama']) ?></span>
+                      <span class="badge" style="<?= $rShiftBadge ?>;font-size:10px;padding:2px 6px"><?= $rShift ?></span>
+                    </div>
+                    <div style="font-size:12px;color:var(--muted)"><?= htmlspecialchars($r['tanggal']) ?> · <?= htmlspecialchars(substr($r['jam_scan'] ?? '', 0, 5)) ?> WIB</div>
                   </div>
                   <div>
                     <span class="tag <?= htmlspecialchars($sclass) ?>"><?= htmlspecialchars(ucfirst($r['status'])) ?></span>
@@ -234,11 +278,16 @@ $alpa_js = json_encode(array_values($alpaData));
                     <span>Akhir Pekan</span>
                   </div>
                 </div>
-                <?php if ($role === 'admin'): ?>
-                  <a href="holidays/index.php" class="btn-manage-holidays">
-                    ⚙️ Kelola Libur
-                  </a>
-                <?php endif; ?>
+                <div class="d-flex gap-1 align-items-center flex-wrap mt-2">
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="btnSyncHolidays" title="Update dan sinkronkan hari libur nasional untuk tahun yang aktif">
+                    🔄 Update Libur Nasional
+                  </button>
+                  <?php if ($role === 'admin'): ?>
+                    <a href="holidays/index.php" class="btn-manage-holidays">
+                      ⚙️ Kelola Libur
+                    </a>
+                  <?php endif; ?>
+                </div>
               </div>
 
               <!-- Modal Tambah Hari Libur (Admin) -->
@@ -401,6 +450,13 @@ $alpa_js = json_encode(array_values($alpaData));
         fixedWeekCount: false,
         showNonCurrentDates: true,
         dayMaxEvents: 2,
+        datesSet: function(info) {
+          // Ketika user berpindah bulan atau tahun, pastikan event holiday ter-sync
+          const curYear = info.view.currentStart ? info.view.currentStart.getFullYear() : new Date().getFullYear();
+          const startYear = info.start.getFullYear();
+          const endYear = info.end.getFullYear();
+          // FullCalendar will automatically fetch includes/holidays.php with ?start=...&end=...
+        },
         eventSources: [
           { url: 'includes/holidays.php' },
           function(fetchInfo, successCallback, failureCallback) {
@@ -486,6 +542,42 @@ $alpa_js = json_encode(array_values($alpaData));
       });
 
       calendar.render();
+
+      // Tombol Sinkronisasi / Update Libur Nasional
+      const btnSyncHolidays = document.getElementById('btnSyncHolidays');
+      if (btnSyncHolidays) {
+        btnSyncHolidays.addEventListener('click', function() {
+          const viewDate = calendar.getDate();
+          const activeYear = viewDate ? viewDate.getFullYear() : new Date().getFullYear();
+          const origText = btnSyncHolidays.innerHTML;
+          btnSyncHolidays.innerHTML = '⏳ Mengupdate (' + activeYear + ')...';
+          btnSyncHolidays.disabled = true;
+
+          const form = new FormData();
+          form.append('action', 'sync_national');
+          form.append('year', activeYear);
+          form.append('force', '1');
+
+          fetch('includes/holidays.php', { method: 'POST', body: form })
+            .then(r => r.json())
+            .then(data => {
+              btnSyncHolidays.innerHTML = origText;
+              btnSyncHolidays.disabled = false;
+              if (data.success) {
+                alert('✅ ' + (data.message || 'Hari libur nasional berhasil diperbarui.'));
+                calendar.refetchEvents();
+                setTimeout(() => window.location.reload(), 500);
+              } else {
+                alert('Gagal memperbarui libur nasional: ' + (data.error || 'Terjadi kesalahan'));
+              }
+            })
+            .catch(err => {
+              btnSyncHolidays.innerHTML = origText;
+              btnSyncHolidays.disabled = false;
+              alert('Gagal menghubungi server untuk sinkronisasi libur.');
+            });
+        });
+      }
 
       // Modal controls
       const modal = document.getElementById('holidayModal');
