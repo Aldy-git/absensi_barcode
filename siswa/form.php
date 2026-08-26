@@ -18,8 +18,8 @@ if ($mode === 'edit' && $id > 0) {
     $siswa = $stmt->get_result()->fetch_assoc();
 }
 
-$kelasList = $conn->query("SELECT DISTINCT kelas FROM siswa WHERE kelas != '' ORDER BY kelas")->fetch_all(MYSQLI_ASSOC);
-$jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa WHERE jurusan != '' ORDER BY jurusan")->fetch_all(MYSQLI_ASSOC);
+$kelasList = ['10', '11', '12'];
+$jurusanList = ['RPL', 'TKJ', 'DKV'];
 
 function generateEan13($nis, $id = 0) {
     $num = preg_replace('/\D/', '', $nis);
@@ -158,10 +158,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $selectedKelas = $siswa['kelas'] ?? '';
                 $kelasFound = false;
                 foreach ($kelasList as $k):
-                  $isSel = ($selectedKelas === $k['kelas']);
+                  $isSel = ($selectedKelas === (string)$k);
                   if ($isSel) $kelasFound = true;
               ?>
-                <option value="<?= htmlspecialchars($k['kelas']) ?>" <?= $isSel ? 'selected' : '' ?>><?= htmlspecialchars($k['kelas']) ?></option>
+                <option value="<?= htmlspecialchars($k) ?>" <?= $isSel ? 'selected' : '' ?>><?= htmlspecialchars($k) ?></option>
               <?php endforeach; ?>
               <?php if (!empty($selectedKelas) && !$kelasFound): ?>
                 <option value="<?= htmlspecialchars($selectedKelas) ?>" selected><?= htmlspecialchars($selectedKelas) ?></option>
@@ -176,10 +176,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $selectedJurusan = $siswa['jurusan'] ?? '';
                 $jurusanFound = false;
                 foreach ($jurusanList as $j):
-                  $isSelJ = ($selectedJurusan === $j['jurusan']);
+                  $isSelJ = ($selectedJurusan === $j);
                   if ($isSelJ) $jurusanFound = true;
               ?>
-                <option value="<?= htmlspecialchars($j['jurusan']) ?>" <?= $isSelJ ? 'selected' : '' ?>><?= htmlspecialchars($j['jurusan']) ?></option>
+                <option value="<?= htmlspecialchars($j) ?>" <?= $isSelJ ? 'selected' : '' ?>><?= htmlspecialchars($j) ?></option>
               <?php endforeach; ?>
               <?php if (!empty($selectedJurusan) && !$jurusanFound): ?>
                 <option value="<?= htmlspecialchars($selectedJurusan) ?>" selected><?= htmlspecialchars($selectedJurusan) ?></option>

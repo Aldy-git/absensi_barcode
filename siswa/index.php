@@ -16,7 +16,8 @@ $role = $_SESSION['role'];
 $message = '';
 $messageType = 'info';
 
-function generateEan13($nis, $id = 0) {
+function generateEan13($nis, $id = 0)
+{
   $num = preg_replace('/\D/', '', $nis);
   if (empty($num)) {
     $num = str_pad((string)$id, 6, '0', STR_PAD_LEFT);
@@ -204,8 +205,15 @@ $stmt->execute();
 $result = $stmt->get_result();
 $siswaList = $result->fetch_all(MYSQLI_ASSOC);
 
-$kelasList = $conn->query("SELECT DISTINCT kelas FROM siswa ORDER BY kelas")->fetch_all(MYSQLI_ASSOC);
-$jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan")->fetch_all(MYSQLI_ASSOC);
+$kelasList = $conn->query("SELECT DISTINCT kelas FROM siswa WHERE kelas != '' ORDER BY kelas")->fetch_all(MYSQLI_ASSOC);
+$jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa WHERE jurusan != '' ORDER BY jurusan")->fetch_all(MYSQLI_ASSOC);
+
+// Pilihan pasti kelas ("10", "11", "12") dan jurusan ("RPL", "TKJ", "DKV")
+$masterKelasList = ['10', '11', '12'];
+$masterJurusanList = ['RPL', 'TKJ', 'DKV'];
+
+$filterKelasList = array_values(array_unique(array_filter(array_merge($masterKelasList, array_column($kelasList, 'kelas')))));
+$filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJurusanList, array_column($jurusanList, 'jurusan')))));
 ?>
 <!doctype html>
 <html lang="id">
@@ -220,7 +228,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
     /* ========================================================
        ANIMASI MODAL POP-UP (MUNCUL & KELUAR - SMOOTH & SATU KALI)
        ======================================================== */
-    
+
     /* State Awal & Saat Menutup (Exit Animation) */
     .modal.fade .modal-dialog {
       opacity: 0;
@@ -340,13 +348,13 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
             <div class="col-md-2">
               <select name="kelas" class="form-select">
                 <option value="">Semua Kelas</option>
-                <?php foreach ($kelasList as $k): ?><option value="<?= htmlspecialchars($k['kelas']) ?>" <?= $kelasFilter === $k['kelas'] ? 'selected' : '' ?>><?= htmlspecialchars($k['kelas']) ?></option><?php endforeach; ?>
+                <?php foreach ($filterKelasList as $k): ?><option value="<?= htmlspecialchars($k) ?>" <?= $kelasFilter === (string)$k ? 'selected' : '' ?>><?= htmlspecialchars($k) ?></option><?php endforeach; ?>
               </select>
             </div>
             <div class="col-md-2">
               <select name="jurusan" class="form-select">
                 <option value="">Semua Jurusan</option>
-                <?php foreach ($jurusanList as $j): ?><option value="<?= htmlspecialchars($j['jurusan']) ?>" <?= $jurusanFilter === $j['jurusan'] ? 'selected' : '' ?>><?= htmlspecialchars($j['jurusan']) ?></option><?php endforeach; ?>
+                <?php foreach ($filterJurusanList as $j): ?><option value="<?= htmlspecialchars($j) ?>" <?= $jurusanFilter === $j ? 'selected' : '' ?>><?= htmlspecialchars($j) ?></option><?php endforeach; ?>
               </select>
             </div>
             <div class="col-md-2">
@@ -493,29 +501,21 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
             <div class="row g-3 mb-3">
               <div class="col-md-6">
                 <label class="form-label" style="font-weight: 600; font-size: 13px;">Kelas <span class="text-danger">*</span></label>
-                <input type="text" list="kelasListOptions" name="kelas" id="siswaFormKelas" class="form-control" placeholder="Pilih / ketik kelas..." required>
-                <datalist id="kelasListOptions">
-                  <?php foreach ($kelasList as $k): ?>
-                    <option value="<?= htmlspecialchars($k['kelas']) ?>"></option>
+                <select name="kelas" id="siswaFormKelas" class="form-select" required>
+                  <option value="">Pilih Kelas</option>
+                  <?php foreach ($masterKelasList as $k): ?>
+                    <option value="<?= htmlspecialchars($k) ?>"><?= htmlspecialchars($k) ?></option>
                   <?php endforeach; ?>
-                  <option value="X RPL 1"></option>
-                  <option value="X TKJ 1"></option>
-                  <option value="XI RPL 1"></option>
-                  <option value="XII RPL 1"></option>
-                </datalist>
+                </select>
               </div>
               <div class="col-md-6">
                 <label class="form-label" style="font-weight: 600; font-size: 13px;">Jurusan <span class="text-danger">*</span></label>
-                <input type="text" list="jurusanListOptions" name="jurusan" id="siswaFormJurusan" class="form-control" placeholder="Pilih / ketik jurusan..." required>
-                <datalist id="jurusanListOptions">
-                  <?php foreach ($jurusanList as $j): ?>
-                    <option value="<?= htmlspecialchars($j['jurusan']) ?>"></option>
+                <select name="jurusan" id="siswaFormJurusan" class="form-select" required>
+                  <option value="">Pilih Jurusan</option>
+                  <?php foreach ($masterJurusanList as $j): ?>
+                    <option value="<?= htmlspecialchars($j) ?>"><?= htmlspecialchars($j) ?></option>
                   <?php endforeach; ?>
-                  <option value="Rekayasa Perangkat Lunak"></option>
-                  <option value="Teknik Komputer & Jaringan"></option>
-                  <option value="Multimedia / DKV"></option>
-                  <option value="Teknik Kendaraan Ringan"></option>
-                </datalist>
+                </select>
               </div>
             </div>
 
@@ -607,8 +607,8 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                 <label class="form-label" style="font-weight:600;font-size:13px">Kelas</label>
                 <select name="bulk_kelas" class="form-select">
                   <option value="">Tetap (Tidak Diubah)</option>
-                  <?php foreach ($kelasList as $k): ?>
-                    <option value="<?= htmlspecialchars($k['kelas']) ?>"><?= htmlspecialchars($k['kelas']) ?></option>
+                  <?php foreach ($masterKelasList as $k): ?>
+                    <option value="<?= htmlspecialchars($k) ?>"><?= htmlspecialchars($k) ?></option>
                   <?php endforeach; ?>
                 </select>
               </div>
@@ -616,8 +616,8 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                 <label class="form-label" style="font-weight:600;font-size:13px">Jurusan</label>
                 <select name="bulk_jurusan" class="form-select">
                   <option value="">Tetap (Tidak Diubah)</option>
-                  <?php foreach ($jurusanList as $j): ?>
-                    <option value="<?= htmlspecialchars($j['jurusan']) ?>"><?= htmlspecialchars($j['jurusan']) ?></option>
+                  <?php foreach ($masterJurusanList as $j): ?>
+                    <option value="<?= htmlspecialchars($j) ?>"><?= htmlspecialchars($j) ?></option>
                   <?php endforeach; ?>
                 </select>
               </div>
@@ -770,7 +770,9 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
           if (siswaFormStatus) siswaFormStatus.value = 'aktif';
 
           modalSiswaForm.show();
-          setTimeout(() => { if (siswaFormNis) siswaFormNis.focus(); }, 150);
+          setTimeout(() => {
+            if (siswaFormNis) siswaFormNis.focus();
+          }, 150);
         });
       }
 
@@ -794,8 +796,32 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
           siswaFormId.value = id;
           siswaFormNis.value = nis;
           siswaFormNama.value = nama;
-          siswaFormKelas.value = kelas;
-          siswaFormJurusan.value = jurusan;
+
+          if (kelas) {
+            let kelasExists = Array.from(siswaFormKelas.options).some(opt => opt.value === kelas);
+            if (!kelasExists) {
+              const opt = document.createElement('option');
+              opt.value = kelas;
+              opt.textContent = kelas;
+              siswaFormKelas.appendChild(opt);
+            }
+            siswaFormKelas.value = kelas;
+          } else {
+            siswaFormKelas.value = '';
+          }
+
+          if (jurusan) {
+            let jurusanExists = Array.from(siswaFormJurusan.options).some(opt => opt.value === jurusan);
+            if (!jurusanExists) {
+              const opt = document.createElement('option');
+              opt.value = jurusan;
+              opt.textContent = jurusan;
+              siswaFormJurusan.appendChild(opt);
+            }
+            siswaFormJurusan.value = jurusan;
+          } else {
+            siswaFormJurusan.value = '';
+          }
 
           if (jk === 'P') {
             if (siswaJkP) siswaJkP.checked = true;
@@ -812,7 +838,9 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
           if (siswaFormStatus) siswaFormStatus.value = status;
 
           modalSiswaForm.show();
-          setTimeout(() => { if (siswaFormNama) siswaFormNama.focus(); }, 150);
+          setTimeout(() => {
+            if (siswaFormNama) siswaFormNama.focus();
+          }, 150);
         });
       });
 
