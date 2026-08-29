@@ -72,7 +72,7 @@ $alpa_js = json_encode(array_values($alpaData));
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard Absensi Barcode</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.6" rel="stylesheet">
+  <link href="assets/style.css?v=1.7" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
 </head>
 <body>
@@ -273,18 +273,14 @@ $alpa_js = json_encode(array_values($alpaData));
                     <span class="legend-dot school"></span>
                     <span>Libur Sekolah</span>
                   </div>
-                  <div class="legend-item" title="Hari Sabtu & Minggu">
-                    <span class="legend-dot weekend"></span>
-                    <span>Akhir Pekan</span>
-                  </div>
                 </div>
-                <div class="d-flex gap-1 align-items-center flex-wrap mt-2">
-                  <button type="button" class="btn btn-sm btn-outline-primary" id="btnSyncHolidays" title="Update dan sinkronkan hari libur nasional untuk tahun yang aktif">
-                    🔄 Update Libur Nasional
+                <div class="calendar-legend-actions">
+                  <button type="button" class="btn-manage-holidays" id="btnSyncHolidays" title="Update dan sinkronkan hari libur nasional untuk tahun yang aktif">
+                    <span>🔄</span> <span>Update Libur Nasional</span>
                   </button>
                   <?php if ($role === 'admin'): ?>
-                    <a href="holidays/index.php" class="btn-manage-holidays">
-                      ⚙️ Kelola Libur
+                    <a href="holidays/index.php" class="btn-manage-holidays" title="Kelola libur sekolah dan tanggal libur">
+                      <span>⚙️</span> <span>Kelola Libur</span>
                     </a>
                   <?php endif; ?>
                 </div>
@@ -458,36 +454,7 @@ $alpa_js = json_encode(array_values($alpaData));
           // FullCalendar will automatically fetch includes/holidays.php with ?start=...&end=...
         },
         eventSources: [
-          { url: 'includes/holidays.php' },
-          function(fetchInfo, successCallback, failureCallback) {
-            try {
-              const events = [];
-              const cur = new Date(fetchInfo.start);
-              const end = new Date(fetchInfo.end);
-              function localDateString(d) {
-                const y = d.getFullYear();
-                const m = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                return y + '-' + m + '-' + day;
-              }
-              while (cur <= end) {
-                if (cur.getDay() === 6) { // Saturday
-                  const dstr = localDateString(cur);
-                  events.push({
-                    id: 'sat-' + dstr,
-                    start: dstr,
-                    title: 'Akhir Pekan (Sabtu)',
-                    allDay: true,
-                    extendedProps: { type: 'weekend', auto: true }
-                  });
-                }
-                cur.setDate(cur.getDate() + 1);
-              }
-              successCallback(events);
-            } catch (e) {
-              failureCallback(e);
-            }
-          }
+          { url: 'includes/holidays.php' }
         ],
         dateClick: function(info) {
           if (!isAdmin) return;
@@ -503,9 +470,6 @@ $alpa_js = json_encode(array_values($alpaData));
         eventClick: function(info) {
           const ev = info.event;
           const type = ev.extendedProps?.type || '';
-          if (ev.extendedProps?.auto && type === 'weekend') {
-            return;
-          }
           if (type === 'national') {
             alert('🎉 ' + ev.title + '\n📅 ' + ev.startStr + ' (Libur Nasional)');
             return;
@@ -533,7 +497,6 @@ $alpa_js = json_encode(array_values($alpaData));
         },
         eventContent: function(arg) {
           const type = arg.event.extendedProps?.type || 'school';
-          if (type === 'weekend') return { html: '' };
           const title = arg.event.title ? arg.event.title.replace(/"/g, '&quot;') : '';
           return {
             html: '<span class="fc-event-dot ' + type + '" title="' + title + '"></span>'

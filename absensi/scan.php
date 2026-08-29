@@ -1048,10 +1048,12 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
       const emptyRecentPlaceholder = document.getElementById('emptyRecentPlaceholder');
       const cameraTanggalDisplay = document.getElementById('cameraTanggalDisplay');
 
-      // State flags
+      // State flags & scan cooldown history (2 minutes per barcode)
       let isProcessing = false;
       let lastScannedToken = '';
       let lastScannedTime = 0;
+      const recentScannedMap = new Map(); // Map: token -> timestamp (ms)
+      const SCAN_COOLDOWN_MS = 120000; // 2 menit jeda untuk barcode yang sama (120 detik)
 
       if (barcodeInput) {
         barcodeInput.focus();
@@ -1212,15 +1214,29 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
         if (!cleanToken) return;
 
         const now = Date.now();
-        // Debounce / Cooldown check: prevent scanning same code in less than 2.5 seconds
-        if (isProcessing) return;
-        if (cleanToken === lastScannedToken && (now - lastScannedTime) < 2500) {
+
+        // 1. Cek apakah barcode ini baru saja discan dalam kurun waktu 2 menit (120 detik)
+        const lastScanTimestamp = recentScannedMap.get(cleanToken);
+        if (lastScanTimestamp && (now - lastScanTimestamp) < SCAN_COOLDOWN_MS) {
+          const remainingSecs = Math.ceil((SCAN_COOLDOWN_MS - (now - lastScanTimestamp)) / 1000);
+          console.log('[Cooldown] Barcode ' + cleanToken + ' diabaikan (cooldown aktif: ' + remainingSecs + 's tersisa).');
           return;
         }
+
+        // 2. Debounce jika request sebelumnya masih diproses
+        if (isProcessing) return;
 
         isProcessing = true;
         lastScannedToken = cleanToken;
         lastScannedTime = now;
+        recentScannedMap.set(cleanToken, now);
+
+        // Bersihkan data cooldown yang sudah kadaluarsa (> 2 menit) untuk menjaga memori
+        for (const [key, time] of recentScannedMap.entries()) {
+          if (now - time > SCAN_COOLDOWN_MS) {
+            recentScannedMap.delete(key);
+          }
+        }
 
         const cameraWrapper = document.getElementById('cameraWrapper');
         const cameraStatusBadge = document.getElementById('cameraStatusBadge');
