@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Edit Data Absensi</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="../assets/style.css?v=1.4" rel="stylesheet">
+    <link href="../assets/style.css?v=2.1" rel="stylesheet">
 </head>
 
 <body>
@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div style="padding:18px">
                             <?php if ($message): ?>
                                 <div class="alert alert-<?= $messageType ?> alert-dismissible fade show" role="alert">
-                                    <?= htmlspecialchars($message) ?>
+                                    <?= $message ?>
                                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                                 </div>
                             <?php endif; ?>

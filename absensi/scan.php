@@ -309,7 +309,7 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scan Absensi Barcode</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="../assets/style.css?v=1.5" rel="stylesheet">
+  <link href="../assets/style.css?v=2.1" rel="stylesheet">
   <style>
     .scanner-box {
       border: 2px dashed #3b82f6;

@@ -86,7 +86,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Laporan Absensi</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="../assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=2.1" rel="stylesheet">
   <style>
     /* ========================================================
        STATISTIC CARDS LAPORAN - WARNA JELAS & KONTRAS TINGGI
@@ -466,7 +466,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
       doc.open();
       doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Print Laporan</title>');
       doc.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">');
-      doc.write('<link rel="stylesheet" href="'+base+'../assets/style.css">');
+      doc.write('<link rel="stylesheet" href="'+base+'../assets/style.css?v=2.1">');
       doc.write('</head><body>');
       // clone content and remove interactive controls
       const clone = mainInner.cloneNode(true);

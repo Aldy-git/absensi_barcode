@@ -26,6 +26,18 @@ $pagiTerlambatHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) 
 $siangHadirHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND shift = 'siang' AND status = 'hadir'"))['total'] ?? 0;
 $siangTerlambatHariIni = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM absensi WHERE tanggal = CURDATE() AND shift = 'siang' AND status = 'terlambat'"))['total'] ?? 0;
 
+$totalMasukHariIni = $hadirHariIni + $terlambatHariIni;
+$totalKhususHariIni = $izinHariIni + $sakitHariIni + $alpaHariIni;
+
+$pctMasuk = $totalSiswa > 0 ? round(($totalMasukHariIni / $totalSiswa) * 100, 1) : 0;
+$pctHadir = $totalSiswa > 0 ? round(($hadirHariIni / $totalSiswa) * 100, 1) : 0;
+$pctTerlambat = $totalSiswa > 0 ? round(($terlambatHariIni / $totalSiswa) * 100, 1) : 0;
+
+$pctKhusus = $totalSiswa > 0 ? round(($totalKhususHariIni / $totalSiswa) * 100, 1) : 0;
+$pctIzin = $totalSiswa > 0 ? round(($izinHariIni / $totalSiswa) * 100, 1) : 0;
+$pctSakit = $totalSiswa > 0 ? round(($sakitHariIni / $totalSiswa) * 100, 1) : 0;
+$pctAlpa = $totalSiswa > 0 ? round(($alpaHariIni / $totalSiswa) * 100, 1) : 0;
+
 $currentShift = detectCurrentShift();
 $shiftPagiRules = getShiftRules('pagi', date('Y-m-d'));
 $shiftSiangRules = getShiftRules('siang', date('Y-m-d'));
@@ -57,6 +69,22 @@ while ($row = mysqli_fetch_assoc($res)) {
   if ($s === 'alpa') $alpaData[$t] = $c;
 }
 
+// Total Masuk (Hadir + Terlambat) per hari untuk tren
+$totalMasukData = [];
+$activeDaysCount = 0;
+foreach ($dates as $d) {
+  $totalMasukData[$d] = $hadirData[$d] + $terlambatData[$d];
+  if (!getHolidayInfo($d, $conn)) {
+    $activeDaysCount++;
+  }
+}
+
+$totalHadir7Hari = array_sum($hadirData);
+$totalTerlambat7Hari = array_sum($terlambatData);
+$totalMasuk7Hari = $totalHadir7Hari + $totalTerlambat7Hari;
+$avgHadirPerHari = $activeDaysCount > 0 ? round($totalHadir7Hari / $activeDaysCount, 1) : 0;
+$avgMasukPerHari = $activeDaysCount > 0 ? round($totalMasuk7Hari / $activeDaysCount, 1) : 0;
+
 // prepare arrays for JS
 $labels_js = json_encode(array_values($labels));
 $hadir_js = json_encode(array_values($hadirData));
@@ -64,6 +92,7 @@ $terlambat_js = json_encode(array_values($terlambatData));
 $izin_js = json_encode(array_values($izinData));
 $sakit_js = json_encode(array_values($sakitData));
 $alpa_js = json_encode(array_values($alpaData));
+$total_masuk_js = json_encode(array_values($totalMasukData));
 ?>
 <!doctype html>
 <html lang="id">
@@ -72,7 +101,7 @@ $alpa_js = json_encode(array_values($alpaData));
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard Absensi Barcode</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/style.css?v=1.7" rel="stylesheet">
+  <link href="assets/style.css?v=2.1" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
 </head>
 <body>
@@ -161,21 +190,109 @@ $alpa_js = json_encode(array_values($alpaData));
           </div>
         <?php endif; ?>
 
-        <div class="stats-grid">
-          <div class="stat-card card">
-            <h6>Hadir Tepat Waktu</h6>
-            <div style="font-size:22px;font-weight:700;color:#059669"><?= $hadirHariIni ?></div>
-            <div style="color:var(--muted);font-size:12px;margin-top:2px">🌅 Pagi: <?= $pagiHadirHariIni ?> · ☀️ Siang: <?= $siangHadirHariIni ?></div>
+        <div class="dashboard-stats-grid mb-3">
+          <!-- Card 1: Hadir & Terlambat -->
+          <div class="dash-stat-card card-presence">
+            <div class="dash-stat-header">
+              <div>
+                <span class="dash-stat-badge badge-presence">Kehadiran Masuk</span>
+                <h5 class="dash-stat-title">Hadir & Terlambat</h5>
+              </div>
+              <div class="dash-stat-icon-box bg-presence-soft" title="Total Hadir dan Terlambat">
+                <span>🎒</span>
+              </div>
+            </div>
+
+            <div class="dash-stat-main">
+              <span class="dash-stat-num text-presence"><?= number_format($totalMasukHariIni) ?></span>
+              <span class="dash-stat-unit">/ <?= $totalSiswa ?> siswa</span>
+              <div class="dash-stat-pct pct-presence" title="Persentase kehadiran masuk dari total siswa">
+                <?= $pctMasuk ?>% Kehadiran
+              </div>
+            </div>
+
+            <!-- Distribution Ratio Bar -->
+            <div class="dash-progress-track" title="Hadir Tepat: <?= $hadirHariIni ?> (<?= $pctHadir ?>%) · Terlambat: <?= $terlambatHariIni ?> (<?= $pctTerlambat ?>%)">
+              <div class="dash-progress-segment seg-hadir" style="width: <?= $pctHadir ?>%"></div>
+              <div class="dash-progress-segment seg-terlambat" style="width: <?= $pctTerlambat ?>%"></div>
+            </div>
+
+            <div class="dash-stat-breakdown">
+              <div class="stat-pill-box pill-box-hadir">
+                <div class="pill-box-header">
+                  <span class="pill-dot dot-hadir"></span>
+                  <span class="pill-title">Hadir Tepat Waktu</span>
+                </div>
+                <div class="pill-box-num"><?= $hadirHariIni ?> <span class="pill-sub">siswa</span></div>
+                <div class="pill-box-shifts">🌅 Pagi: <?= $pagiHadirHariIni ?> &nbsp;·&nbsp; ☀️ Siang: <?= $siangHadirHariIni ?></div>
+              </div>
+
+              <div class="stat-pill-box pill-box-terlambat">
+                <div class="pill-box-header">
+                  <span class="pill-dot dot-terlambat"></span>
+                  <span class="pill-title">Terlambat</span>
+                </div>
+                <div class="pill-box-num"><?= $terlambatHariIni ?> <span class="pill-sub">siswa</span></div>
+                <div class="pill-box-shifts">🌅 Pagi: <?= $pagiTerlambatHariIni ?> &nbsp;·&nbsp; ☀️ Siang: <?= $siangTerlambatHariIni ?></div>
+              </div>
+            </div>
           </div>
-          <div class="stat-card card">
-            <h6>Terlambat</h6>
-            <div style="font-size:22px;font-weight:700;color:#b45309"><?= $terlambatHariIni ?></div>
-            <div style="color:var(--muted);font-size:12px;margin-top:2px">🌅 Pagi: <?= $pagiTerlambatHariIni ?> · ☀️ Siang: <?= $siangTerlambatHariIni ?></div>
-          </div>
-          <div class="stat-card card">
-            <h6>Izin / Sakit / Alpa</h6>
-            <div style="font-size:22px;font-weight:700;color:#0ea5a0"><?= $izinHariIni + $sakitHariIni + $alpaHariIni ?></div>
-            <div style="color:var(--muted);font-size:12px;margin-top:2px">Izin: <?= $izinHariIni ?> · Sakit: <?= $sakitHariIni ?> · Alpa: <?= $alpaHariIni ?></div>
+
+          <!-- Card 2: Izin, Sakit & Alpa -->
+          <div class="dash-stat-card card-absence">
+            <div class="dash-stat-header">
+              <div>
+                <span class="dash-stat-badge badge-absence">Keterangan Khusus</span>
+                <h5 class="dash-stat-title">Izin / Sakit / Alpa</h5>
+              </div>
+              <div class="dash-stat-icon-box bg-absence-soft" title="Total Berhalangan / Tidak Masuk">
+                <span>📋</span>
+              </div>
+            </div>
+
+            <div class="dash-stat-main">
+              <span class="dash-stat-num text-absence"><?= number_format($totalKhususHariIni) ?></span>
+              <span class="dash-stat-unit">siswa hari ini</span>
+              <div class="dash-stat-pct pct-absence" title="Persentase siswa tidak masuk">
+                <?= $pctKhusus ?>% dari total
+              </div>
+            </div>
+
+            <!-- Distribution Ratio Bar -->
+            <div class="dash-progress-track" title="Izin: <?= $izinHariIni ?> · Sakit: <?= $sakitHariIni ?> · Alpa: <?= $alpaHariIni ?>">
+              <div class="dash-progress-segment seg-izin" style="width: <?= $pctIzin ?>%"></div>
+              <div class="dash-progress-segment seg-sakit" style="width: <?= $pctSakit ?>%"></div>
+              <div class="dash-progress-segment seg-alpa" style="width: <?= $pctAlpa ?>%"></div>
+            </div>
+
+            <div class="dash-stat-breakdown three-cols">
+              <div class="stat-pill-box pill-box-izin">
+                <div class="pill-box-header">
+                  <span class="pill-dot dot-izin"></span>
+                  <span class="pill-title">Izin</span>
+                </div>
+                <div class="pill-box-num"><?= $izinHariIni ?> <span class="pill-sub">siswa</span></div>
+                <div class="pill-box-shifts">Dispensasi / surat</div>
+              </div>
+
+              <div class="stat-pill-box pill-box-sakit">
+                <div class="pill-box-header">
+                  <span class="pill-dot dot-sakit"></span>
+                  <span class="pill-title">Sakit</span>
+                </div>
+                <div class="pill-box-num"><?= $sakitHariIni ?> <span class="pill-sub">siswa</span></div>
+                <div class="pill-box-shifts">Surat keterangan</div>
+              </div>
+
+              <div class="stat-pill-box pill-box-alpa">
+                <div class="pill-box-header">
+                  <span class="pill-dot dot-alpa"></span>
+                  <span class="pill-title">Alpa</span>
+                </div>
+                <div class="pill-box-num"><?= $alpaHariIni ?> <span class="pill-sub">siswa</span></div>
+                <div class="pill-box-shifts">Tanpa keterangan</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -209,13 +326,43 @@ $alpa_js = json_encode(array_values($alpaData));
         <div class="content-grid">
           <div>
             <div class="chart-card card">
-              <h6>Rekap 7 Hari Terakhir</h6>
+              <div class="chart-header">
+                <div class="chart-title-wrap">
+                  <h6 class="chart-main-title">
+                    <span>📊</span>
+                    <span>Rekap Absensi 7 Hari Terakhir</span>
+                  </h6>
+                  <p class="chart-sub-title">Perbandingan status kehadiran siswa (Hari libur dikecualikan)</p>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <span class="chart-meta-badge badge-success-soft" title="Total kehadiran tepat waktu dalam 7 hari">
+                    <span>🟢</span> Hadir: <strong><?= number_format($totalHadir7Hari) ?></strong>
+                  </span>
+                  <span class="chart-meta-badge" title="Total terlambat dalam 7 hari">
+                    <span>⏰</span> Terlambat: <strong><?= number_format($totalTerlambat7Hari) ?></strong>
+                  </span>
+                </div>
+              </div>
               <div class="chart-container">
                 <canvas id="chart7"></canvas>
               </div>
             </div>
-            <div class="chart-card card" style="margin-top:12px">
-              <h6>Tren Kehadiran</h6>
+
+            <div class="chart-card card" style="margin-top:14px">
+              <div class="chart-header">
+                <div class="chart-title-wrap">
+                  <h6 class="chart-main-title">
+                    <span>📈</span>
+                    <span>Tren Kehadiran Siswa</span>
+                  </h6>
+                  <p class="chart-sub-title">Grafik dinamika kehadiran tepat waktu vs total siswa masuk</p>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <span class="chart-meta-badge badge-info-soft" title="Rata-rata siswa hadir tepat per hari kerja aktif">
+                    <span>⚡</span> Rata-rata: <strong><?= $avgHadirPerHari ?></strong> siswa/hari
+                  </span>
+                </div>
+              </div>
               <div class="chart-container">
                 <canvas id="chartTrend"></canvas>
               </div>
@@ -376,12 +523,31 @@ $alpa_js = json_encode(array_values($alpaData));
             </div>
 
             <div class="chart-card card">
-              <h6>Ringkasan Hari Ini</h6>
-              <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-                <div style="display:flex;justify-content:space-between"><div>Hadir</div><div><?= $hadirHariIni ?></div></div>
-                <div style="display:flex;justify-content:space-between"><div>Terlambat</div><div><?= $terlambatHariIni ?></div></div>
-                <div style="display:flex;justify-content:space-between"><div>Izin</div><div><?= $izinHariIni ?></div></div>
-                <div style="display:flex;justify-content:space-between"><div>Sakit</div><div><?= $sakitHariIni ?></div></div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 style="margin:0;font-weight:700">Ringkasan Hari Ini</h6>
+                <span style="font-size:11px;color:var(--muted)"><?= date('d/m/Y') ?></span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed #f1f5f9">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981"></span> Hadir Tepat</div>
+                  <div style="font-weight:700;color:#10b981"><?= $hadirHariIni ?></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed #f1f5f9">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b"></span> Terlambat</div>
+                  <div style="font-weight:700;color:#f59e0b"><?= $terlambatHariIni ?></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed #f1f5f9">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="width:8px;height:8px;border-radius:50%;background:#06b6d4"></span> Izin</div>
+                  <div style="font-weight:700;color:#06b6d4"><?= $izinHariIni ?></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed #f1f5f9">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="width:8px;height:8px;border-radius:50%;background:#8b5cf6"></span> Sakit</div>
+                  <div style="font-weight:700;color:#8b5cf6"><?= $sakitHariIni ?></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444"></span> Alpa</div>
+                  <div style="font-weight:700;color:#ef4444"><?= $alpaHariIni ?></div>
+                </div>
               </div>
             </div>
           </aside>
@@ -399,7 +565,9 @@ $alpa_js = json_encode(array_values($alpaData));
     const izin = <?= $izin_js ?>;
     const sakit = <?= $sakit_js ?>;
     const alpa = <?= $alpa_js ?>;
+    const totalMasuk = <?= $total_masuk_js ?>;
 
+    // 1. Chart Rekap 7 Hari Terakhir (Bar Chart dengan Rounded Corner & Custom Tooltip)
     const ctx7 = document.getElementById('chart7');
     if (ctx7) {
       new Chart(ctx7, {
@@ -407,20 +575,192 @@ $alpa_js = json_encode(array_values($alpaData));
         data: {
           labels: labels,
           datasets: [
-            {label:'Hadir', data: hadir, backgroundColor:'#10b981'},
-            {label:'Terlambat', data: terlambat, backgroundColor:'#f59e0b'},
-            {label:'Izin', data: izin, backgroundColor:'#06b6d4'},
-            {label:'Sakit', data: sakit, backgroundColor:'#8b5cf6'},
-            {label:'Alpa', data: alpa, backgroundColor:'#ef4444'}
+            {
+              label: 'Hadir',
+              data: hadir,
+              backgroundColor: '#10b981',
+              hoverBackgroundColor: '#059669',
+              borderRadius: 6,
+              borderSkipped: false
+            },
+            {
+              label: 'Terlambat',
+              data: terlambat,
+              backgroundColor: '#f59e0b',
+              hoverBackgroundColor: '#d97706',
+              borderRadius: 6,
+              borderSkipped: false
+            },
+            {
+              label: 'Izin',
+              data: izin,
+              backgroundColor: '#06b6d4',
+              hoverBackgroundColor: '#0891b2',
+              borderRadius: 6,
+              borderSkipped: false
+            },
+            {
+              label: 'Sakit',
+              data: sakit,
+              backgroundColor: '#8b5cf6',
+              hoverBackgroundColor: '#7c3aed',
+              borderRadius: 6,
+              borderSkipped: false
+            },
+            {
+              label: 'Alpa',
+              data: alpa,
+              backgroundColor: '#ef4444',
+              hoverBackgroundColor: '#dc2626',
+              borderRadius: 6,
+              borderSkipped: false
+            }
           ]
         },
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          barPercentage: 0.75,
+          categoryPercentage: 0.82,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                usePointStyle: true,
+                pointStyle: 'circle',
+                padding: 14,
+                font: { size: 12, weight: '600', family: 'system-ui, sans-serif' },
+                color: '#475569'
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleFont: { size: 13, weight: '700', family: 'system-ui, sans-serif' },
+              bodyFont: { size: 12, family: 'system-ui, sans-serif' },
+              padding: { top: 8, bottom: 8, left: 12, right: 12 },
+              cornerRadius: 8,
+              usePointStyle: true,
+              callbacks: {
+                label: function(context) {
+                  return ' ' + context.dataset.label + ': ' + context.parsed.y + ' siswa';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 11, weight: '600' }, color: '#64748b' }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0, font: { size: 11 }, color: '#64748b' },
+              grid: { color: 'rgba(226, 232, 240, 0.7)', strokeDash: [4, 4] }
+            }
+          }
+        }
       });
     }
 
+    // 2. Chart Tren Kehadiran (Curved Smooth Gradient Area Line Chart)
     const ctxT = document.getElementById('chartTrend');
     if (ctxT) {
-      new Chart(ctxT, {type:'line',data:{labels:labels,datasets:[{label:'Hadir',data:hadir,borderColor:'#06b6d4',fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+      const canvasCtx = ctxT.getContext('2d');
+
+      // Soft gradients
+      const gradHadir = canvasCtx.createLinearGradient(0, 0, 0, 220);
+      gradHadir.addColorStop(0, 'rgba(16, 185, 129, 0.28)');
+      gradHadir.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+      const gradMasuk = canvasCtx.createLinearGradient(0, 0, 0, 220);
+      gradMasuk.addColorStop(0, 'rgba(2, 132, 199, 0.16)');
+      gradMasuk.addColorStop(1, 'rgba(2, 132, 199, 0.0)');
+
+      new Chart(ctxT, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Hadir Tepat Waktu',
+              data: hadir,
+              borderColor: '#10b981',
+              backgroundColor: gradHadir,
+              borderWidth: 2.8,
+              fill: true,
+              tension: 0.38,
+              pointRadius: 4.5,
+              pointHoverRadius: 7,
+              pointBackgroundColor: '#ffffff',
+              pointBorderColor: '#10b981',
+              pointBorderWidth: 2.5
+            },
+            {
+              label: 'Total Masuk (Hadir + Terlambat)',
+              data: totalMasuk,
+              borderColor: '#0284c7',
+              backgroundColor: gradMasuk,
+              borderWidth: 2.2,
+              borderDash: [5, 4],
+              fill: true,
+              tension: 0.38,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#ffffff',
+              pointBorderColor: '#0284c7',
+              pointBorderWidth: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                usePointStyle: true,
+                pointStyle: 'circle',
+                padding: 14,
+                font: { size: 12, weight: '600', family: 'system-ui, sans-serif' },
+                color: '#475569'
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleFont: { size: 13, weight: '700', family: 'system-ui, sans-serif' },
+              bodyFont: { size: 12, family: 'system-ui, sans-serif' },
+              padding: { top: 8, bottom: 8, left: 12, right: 12 },
+              cornerRadius: 8,
+              usePointStyle: true,
+              callbacks: {
+                label: function(context) {
+                  return ' ' + context.dataset.label + ': ' + context.parsed.y + ' siswa';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 11, weight: '600' }, color: '#64748b' }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0, font: { size: 11 }, color: '#64748b' },
+              grid: { color: 'rgba(226, 232, 240, 0.7)', strokeDash: [4, 4] }
+            }
+          }
+        }
+      });
     }
 
     // FullCalendar init

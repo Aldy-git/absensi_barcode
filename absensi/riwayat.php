@@ -159,7 +159,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Riwayat Absensi</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="../assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=2.1" rel="stylesheet">
 </head>
 
 <body>
@@ -239,7 +239,7 @@ $statusList = $conn->query("SELECT DISTINCT status FROM absensi ORDER BY status"
         <div style="padding:12px;border-radius:12px">
           <?php if ($message): ?>
             <div class="alert alert-<?= $messageType ?> alert-dismissible fade show mb-3" role="alert">
-              <?= htmlspecialchars($message) ?>
+              <?= $message ?>
               <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
           <?php endif; ?>

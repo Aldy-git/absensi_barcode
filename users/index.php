@@ -78,7 +78,7 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>User Management</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="../assets/style.css?v=1.4" rel="stylesheet">
+  <link href="../assets/style.css?v=2.1" rel="stylesheet">
 </head>
 
 <body>
