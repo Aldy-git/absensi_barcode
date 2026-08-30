@@ -43,23 +43,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $role = $_POST['role'] ?? 'guru';
 
   if ($username !== '' && $password !== '') {
-    // Cek duplikasi username
-    $check = $conn->prepare("SELECT id FROM users WHERE username = ?");
-    $check->bind_param('s', $username);
-    $check->execute();
-    if ($check->get_result()->num_rows > 0) {
-      $message = 'Username sudah digunakan, silakan pilih username lain.';
+    [$isPolicyValid, $policyError] = validatePasswordPolicy($password);
+    if (!$isPolicyValid) {
+      $message = $policyError;
       $messageType = 'danger';
     } else {
-      $hash = password_hash($password, PASSWORD_DEFAULT);
-      $stmt = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
-      $stmt->bind_param('sss', $username, $hash, $role);
-      if ($stmt->execute()) {
-        $message = 'User berhasil ditambahkan.';
-        $messageType = 'success';
-      } else {
-        $message = 'Gagal menambahkan user: ' . $conn->error;
+      // Cek duplikasi username
+      $check = $conn->prepare("SELECT id FROM users WHERE username = ?");
+      $check->bind_param('s', $username);
+      $check->execute();
+      if ($check->get_result()->num_rows > 0) {
+        $message = 'Username sudah digunakan, silakan pilih username lain.';
         $messageType = 'danger';
+      } else {
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
+        $stmt->bind_param('sss', $username, $hash, $role);
+        if ($stmt->execute()) {
+          $message = 'User berhasil ditambahkan.';
+          $messageType = 'success';
+        } else {
+          $message = 'Gagal menambahkan user: ' . $conn->error;
+          $messageType = 'danger';
+        }
       }
     }
   } else {
@@ -225,7 +231,8 @@ $users = $conn->query("SELECT * FROM users ORDER BY id")->fetch_all(MYSQLI_ASSOC
             </div>
             <div class="mb-2">
               <label class="form-label" style="font-weight: 600; font-size: 13px;">Password</label>
-              <input type="password" name="password" class="form-control" placeholder="Password" required>
+              <input type="password" name="password" class="form-control" placeholder="Min. 8 karakter (huruf & angka)" minlength="8" required>
+              <div class="form-text" style="font-size: 11px; color: #64748b;">Minimal 8 karakter, gabungan huruf (A-Z/a-z) dan angka (0-9) tanpa simbol.</div>
             </div>
             <div class="mb-2">
               <label class="form-label" style="font-weight: 600; font-size: 13px;">Role</label>

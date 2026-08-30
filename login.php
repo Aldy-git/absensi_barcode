@@ -30,20 +30,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $storedPassword = $user['password'] ?? '';
     $isValidPassword = false;
 
-    if ($user) {
-      $isValidPassword = password_verify($password, $storedPassword)
-        || strcasecmp(md5($password), $storedPassword) === 0
-        || $storedPassword === $password;
-    }
-
-    if ($user && $isValidPassword) {
-      $_SESSION['user_id'] = $user['id'];
-      $_SESSION['username'] = $user['username'];
-      $_SESSION['role'] = $user['role'];
-      header('Location: dashboard.php');
-      exit;
+    // Validasi aturan password: min 8 karakter, huruf A-Z/a-z dan angka 0-9, tanpa simbol/spasi
+    [$isPolicyValid, $policyError] = validatePasswordPolicy($password);
+    if (!$isPolicyValid) {
+      $error = $policyError;
     } else {
-      $error = 'Username atau password yang Anda masukkan salah.';
+      if ($user) {
+        $isValidPassword = password_verify($password, $storedPassword)
+          || strcasecmp(md5($password), $storedPassword) === 0
+          || $storedPassword === $password;
+      }
+
+      if ($user && $isValidPassword) {
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['username'] = $user['username'];
+        $_SESSION['role'] = $user['role'];
+        header('Location: dashboard.php');
+        exit;
+      } else {
+        $error = 'Username atau password yang Anda masukkan salah.';
+      }
     }
   }
 }
@@ -215,10 +221,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="passwordInput">Password</label>
             <div class="input-group">
               <span class="input-group-text">🔒</span>
-              <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Masukkan password" required>
+              <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Min. 8 karakter (huruf & angka)" required autocomplete="current-password">
               <button class="btn btn-outline-secondary" type="button" id="btnTogglePassword" style="border-color: #dee2e6; background: #f8fafc; font-size: 13px" title="Lihat Password">
                 👁️
               </button>
+            </div>
+            <div id="passwordPolicyFeedback" style="font-size: 11.5px; margin-top: 6px; display: none; line-height: 1.3;"></div>
+            <div class="form-text" style="font-size: 11.5px; color: #64748b; margin-top: 5px;">
+              🛡️ Minimal 8 karakter, gabungan huruf (A-Z/a-z) dan angka (0-9) tanpa simbol.
             </div>
           </div>
 
@@ -237,6 +247,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Toggle Password Visibility
     const btnToggle = document.getElementById('btnTogglePassword');
     const pwdInput = document.getElementById('passwordInput');
+    const feedback = document.getElementById('passwordPolicyFeedback');
+    const form = document.getElementById('loginForm');
+
     if (btnToggle && pwdInput) {
       btnToggle.addEventListener('click', function() {
         if (pwdInput.type === 'password') {
@@ -245,6 +258,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
           pwdInput.type = 'password';
           btnToggle.textContent = '👁️';
+        }
+      });
+    }
+
+    // Real-time Validation for Password Policy
+    function validatePasswordInput(val) {
+      if (!val) return { valid: false, msg: '' };
+      if (/[^a-zA-Z0-9]/.test(val)) {
+        return { valid: false, msg: '❌ Password tidak valid: Mengandung simbol atau spasi. Hanya huruf (A-Z, a-z) dan angka (0-9) yang diperbolehkan.' };
+      }
+      if (val.length < 8) {
+        return { valid: false, msg: '⚠️ Panjang password saat ini ' + val.length + ' karakter (minimal 8 karakter).' };
+      }
+      if (!/[a-zA-Z]/.test(val) || !/[0-9]/.test(val)) {
+        return { valid: false, msg: '⚠️ Password harus mengandung gabungan huruf (A-Z/a-z) dan angka (0-9).' };
+      }
+      return { valid: true, msg: '✅ Format password valid.' };
+    }
+
+    if (pwdInput && feedback) {
+      pwdInput.addEventListener('input', function() {
+        const val = this.value;
+        if (!val) {
+          feedback.style.display = 'none';
+          return;
+        }
+        const res = validatePasswordInput(val);
+        feedback.style.display = 'block';
+        feedback.textContent = res.msg;
+        feedback.style.color = res.valid ? '#16a34a' : (/[^a-zA-Z0-9]/.test(val) ? '#dc2626' : '#d97706');
+      });
+    }
+
+    if (form && pwdInput) {
+      form.addEventListener('submit', function(e) {
+        const val = pwdInput.value;
+        const res = validatePasswordInput(val);
+        if (!res.valid) {
+          e.preventDefault();
+          feedback.style.display = 'block';
+          feedback.textContent = res.msg;
+          feedback.style.color = '#dc2626';
+          pwdInput.focus();
         }
       });
     }

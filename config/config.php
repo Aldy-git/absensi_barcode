@@ -475,3 +475,33 @@ function syncNationalHolidays($conn, $year = null) {
     return $inserted;
 }
 
+
+
+/**
+ * Validasi Kebijakan Password:
+ * - Minimal 8 karakter
+ * - Hanya gabungan huruf (a-z, A-Z) dan angka (0-9)
+ * - Harus mengandung setidaknya 1 huruf dan 1 angka
+ * - Tidak boleh mengandung simbol, spasi, atau karakter khusus lainnya
+ *
+ * @param string $password
+ * @return array [bool $isValid, string $errorMessage]
+ */
+function validatePasswordPolicy($password) {
+    if (strlen($password) < 8) {
+        return [false, "Password harus memiliki panjang minimal 8 karakter."];
+    }
+    // Cek apakah ada karakter di luar huruf dan angka (seperti simbol, spasi, dll)
+    if (!preg_match("/^[a-zA-Z0-9]+$/", $password)) {
+        return [false, "Password tidak valid. Password hanya boleh berupa gabungan huruf (A-Z, a-z) dan angka (0-9) tanpa simbol atau spasi."];
+    }
+    // Cek apakah mengandung setidaknya 1 huruf
+    if (!preg_match("/[a-zA-Z]/", $password)) {
+        return [false, "Password harus mengandung kombinasi huruf (A-Z/a-z) dan angka (0-9)."];
+    }
+    // Cek apakah mengandung setidaknya 1 angka
+    if (!preg_match("/[0-9]/", $password)) {
+        return [false, "Password harus mengandung kombinasi huruf (A-Z/a-z) dan angka (0-9)."];
+    }
+    return [true, ""];
+}

@@ -47,19 +47,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = 'Anda tidak dapat mengubah role akun Anda sendiri menjadi bukan admin.';
             } else {
                 if ($password !== '') {
-                    $hash = password_hash($password, PASSWORD_DEFAULT);
-                    $upd = $conn->prepare("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?");
-                    $upd->bind_param('sssi', $username, $hash, $role, $id);
+                    [$isPolicyValid, $policyError] = validatePasswordPolicy($password);
+                    if (!$isPolicyValid) {
+                        $message = $policyError;
+                    } else {
+                        $hash = password_hash($password, PASSWORD_DEFAULT);
+                        $upd = $conn->prepare("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?");
+                        $upd->bind_param('sssi', $username, $hash, $role, $id);
+                        if ($upd->execute()) {
+                            header('Location: index.php?msg=updated');
+                            exit;
+                        } else {
+                            $message = 'Gagal menyimpan data: ' . $conn->error;
+                        }
+                    }
                 } else {
                     $upd = $conn->prepare("UPDATE users SET username = ?, role = ? WHERE id = ?");
                     $upd->bind_param('ssi', $username, $role, $id);
-                }
-
-                if ($upd->execute()) {
-                    header('Location: index.php?msg=updated');
-                    exit;
-                } else {
-                    $message = 'Gagal menyimpan data: ' . $conn->error;
+                    if ($upd->execute()) {
+                        header('Location: index.php?msg=updated');
+                        exit;
+                    } else {
+                        $message = 'Gagal menyimpan data: ' . $conn->error;
+                    }
                 }
             }
         }
@@ -159,8 +169,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="mb-3">
                   <label class="form-label" style="font-weight:600">Password Baru</label>
-                  <input type="password" name="password" class="form-control" placeholder="Kosongkan jika tidak ingin mengubah password">
-                  <div class="form-text" style="font-size:12px">Biarkan kosong jika tidak ingin mengubah password.</div>
+                  <input type="password" name="password" class="form-control" placeholder="Kosongkan jika tidak ingin mengubah password" minlength="8">
+                  <div class="form-text" style="font-size:11.5px; color:#64748b;">Biarkan kosong jika tidak ingin mengubah. Jika diubah, minimal 8 karakter gabungan huruf (A-Z/a-z) dan angka (0-9) tanpa simbol.</div>
                 </div>
                 <div class="mb-4">
                   <label class="form-label" style="font-weight:600">Role</label>
