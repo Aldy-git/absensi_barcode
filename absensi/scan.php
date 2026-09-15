@@ -2,7 +2,9 @@
 session_start();
 require_once __DIR__ . '/../config/config.php';
 
-if (empty($_SESSION['user_id'])) {
+$isPublicScan = defined('PUBLIC_SCAN_MODE') && PUBLIC_SCAN_MODE === true;
+
+if (empty($_SESSION['user_id']) && !$isPublicScan) {
   if (isset($_POST['ajax']) || isset($_GET['ajax'])) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success' => false, 'type' => 'danger', 'message' => 'Sesi login telah berakhir. Silakan login kembali.']);
@@ -13,13 +15,14 @@ if (empty($_SESSION['user_id'])) {
 }
 
 $role = $_SESSION['role'] ?? 'guru';
+$displayUsername = $_SESSION['username'] ?? 'Scan Publik';
 $message = '';
 $messageType = 'info';
 $lastScannedSiswa = null;
 $lastScannedStatus = '';
 $lastScannedJam = '';
 
-$selectedTanggal = $_POST['tanggal'] ?? ($_GET['tanggal'] ?? date('Y-m-d'));
+$selectedTanggal = date('Y-m-d');
 
 // ----------------------------------------------------
 // AJAX Scanner Handler (Fast immediate acceptance)
@@ -27,7 +30,7 @@ $selectedTanggal = $_POST['tanggal'] ?? ($_GET['tanggal'] ?? date('Y-m-d'));
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['ajax']) && $_POST['ajax'] === '1')) {
   header('Content-Type: application/json; charset=utf-8');
   $token = trim($_POST['barcode_code'] ?? '');
-  $selectedTanggal = $_POST['tanggal'] ?? date('Y-m-d');
+  $selectedTanggal = date('Y-m-d');
 
   if ($token === '') {
     echo json_encode([
@@ -199,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['ajax']) && $_POST['a
 // ----------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $token = trim($_POST['barcode_code'] ?? '');
-  $selectedTanggal = $_POST['tanggal'] ?? date('Y-m-d');
+  $selectedTanggal = date('Y-m-d');
   $status = 'hadir';
 
   $holidayInfo = getHolidayInfo($selectedTanggal, $conn);
@@ -311,6 +314,46 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="../assets/style.css?v=2.1" rel="stylesheet">
   <style>
+    body.public-scan .sidebar {
+      display: none;
+    }
+
+    body.public-scan .main {
+      margin-left: 0;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    body.public-scan .app-header {
+      position: relative;
+      flex: 0 0 60px;
+    }
+
+    body.public-scan .header-brand {
+      display: flex;
+    }
+
+    body.public-scan .user-chip,
+    body.public-scan .btn-logout-header {
+      display: none;
+    }
+
+    .btn-login-header {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .btn-login-header:hover {
+      background: #1d4ed8;
+      color: #fff;
+    }
+
     .scanner-box {
       border: 2px dashed #3b82f6;
       background: #f8fafc;
@@ -579,7 +622,7 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
   </style>
 </head>
 
-<body>
+<body class="<?= $isPublicScan ? 'public-scan' : '' ?>">
   <div class="site-shell">
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar(event)"></div>
     <aside class="sidebar">
@@ -610,7 +653,7 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
       </div>
       <div class="footer">
         <div style="margin-bottom:10px">
-          <strong><?= htmlspecialchars($_SESSION['username']) ?></strong>
+          <strong><?= htmlspecialchars($displayUsername) ?></strong>
           <div style="font-size:13px;color:#8898a6"><?= htmlspecialchars($role) ?></div>
         </div>
         <a href="../logout.php" style="display:inline-block;padding:8px 12px;background:#ef4444;color:#fff;border-radius:8px;text-decoration:none">Keluar</a>
@@ -620,11 +663,13 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
     <main class="main">
       <header class="app-header">
         <div class="header-left">
-          <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar(event)" aria-label="Toggle Menu" title="Buka / Tutup Menu">
-            <span class="hamburger-line"></span>
-            <span class="hamburger-line"></span>
-            <span class="hamburger-line"></span>
-          </button>
+          <?php if (!$isPublicScan): ?>
+            <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar(event)" aria-label="Toggle Menu" title="Buka / Tutup Menu">
+              <span class="hamburger-line"></span>
+              <span class="hamburger-line"></span>
+              <span class="hamburger-line"></span>
+            </button>
+          <?php endif; ?>
           <div class="header-brand">
             <div class="logo-circle-sm">BC</div>
             <div class="header-brand-text">
@@ -639,6 +684,9 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
             <span class="user-name"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
             <span class="user-role-badge"><?= htmlspecialchars($role ?? $_SESSION['role'] ?? 'Petugas') ?></span>
           </div>
+          <?php if ($isPublicScan): ?>
+            <a href="../login.php" class="btn-login-header" title="Masuk ke sistem">Login</a>
+          <?php endif; ?>
           <a href="../logout.php" class="btn-logout-header" title="Keluar dari sistem">Keluar</a>
         </div>
       </header>
@@ -777,11 +825,7 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
                 <div class="tab-pane fade show active" id="tab-scanner" role="tabpanel">
                   <form method="post" id="barcodeForm">
                     <div class="row g-2 mb-3">
-                      <div class="col-md-6">
-                        <label class="form-label" style="font-weight:600;font-size:13px">Tanggal Absensi</label>
-                        <input type="date" name="tanggal" id="tanggalInput" class="form-control" value="<?= htmlspecialchars($selectedTanggal) ?>" required>
-                      </div>
-                      <div class="col-md-6">
+                      <div class="col-md-12">
                         <label class="form-label" style="font-weight:600;font-size:13px">Ketentuan Jam Masuk Shift</label>
                         <div class="form-control" style="background:#f8fafc;color:#475569;font-size:12px;height:auto">
                           🌅 <strong>Pagi</strong>: 06.00 - 07.00 &nbsp;|&nbsp; ☀️ <strong>Siang</strong>: 12.00 - <?= $shiftSiangRules['jam_masuk_str'] ?>
@@ -1036,8 +1080,12 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+      if (document.body.classList.contains('public-scan')) {
+        const cameraTab = document.getElementById('camera-tab');
+        if (cameraTab) cameraTab.click();
+      }
+
       const barcodeInput = document.getElementById('barcodeInput');
-      const tanggalInput = document.getElementById('tanggalInput');
       const barcodeForm = document.getElementById('barcodeForm');
       const liveAlertArea = document.getElementById('liveAlertArea');
       const liveStudentCardArea = document.getElementById('liveStudentCardArea');
@@ -1058,21 +1106,6 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
       if (barcodeInput) {
         barcodeInput.focus();
         barcodeInput.select();
-      }
-
-      // Sync date display when date input changes
-      if (tanggalInput && cameraTanggalDisplay) {
-        tanggalInput.addEventListener('change', function() {
-          const d = new Date(this.value);
-          if (!isNaN(d.getTime())) {
-            const options = {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric'
-            };
-            cameraTanggalDisplay.textContent = d.toLocaleDateString('id-ID', options);
-          }
-        });
       }
 
       // Render Alert Banner dynamically
@@ -1248,11 +1281,9 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
           `;
         }
 
-        const selectedTanggal = (tanggalInput ? tanggalInput.value : '') || new Date().toISOString().split('T')[0];
         const formData = new URLSearchParams();
         formData.append('ajax', '1');
         formData.append('barcode_code', cleanToken);
-        formData.append('tanggal', selectedTanggal);
 
         fetch('scan.php', {
             method: 'POST',

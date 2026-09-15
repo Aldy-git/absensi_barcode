@@ -14,7 +14,7 @@ $messageType = 'info';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $siswa_id = (int)($_POST['siswa_id'] ?? 0);
-  $tanggal = $_POST['tanggal'] ?? date('Y-m-d');
+  $tanggal = date('Y-m-d');
   $status = $_POST['status'] ?? 'hadir';
   $shift = trim($_POST['shift'] ?? '');
 
@@ -174,7 +174,7 @@ $siswaList = $conn->query("SELECT id, nis, nama, kelas, jurusan, shift FROM sisw
               <form method="post" id="formAbsensiManual">
                 <div class="mb-3">
                   <label class="form-label" style="font-weight:600">Tanggal Absensi</label>
-                  <input type="date" name="tanggal" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                  <div class="form-control" style="background:#f8fafc"><?= date('d/m/Y') ?> (hari ini)</div>
                 </div>
 
                 <div class="mb-3">
