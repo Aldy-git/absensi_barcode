@@ -177,6 +177,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       transform: translateY(0);
     }
 
+    .btn-public-scan {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid #0ea5a0;
+      border-radius: 8px;
+      color: #0f766e;
+      background: #ecfeff;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-public-scan:hover {
+      color: #ffffff;
+      background: #0f766e;
+      border-color: #0f766e;
+    }
+
     .auth-footer {
       text-align: center;
       color: rgba(255, 255, 255, 0.5);
@@ -233,6 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
 
           <button type="submit" class="btn btn-login-submit">Masuk</button>
+          <a href="absensi/scan_otomatis.php" class="btn-public-scan">📷 Scan Otomatis</a>
         </form>
       </div>
     </div>
