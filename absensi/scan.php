@@ -1285,7 +1285,7 @@ $shiftSiangRules = getShiftRules('siang', $selectedTanggal);
         formData.append('ajax', '1');
         formData.append('barcode_code', cleanToken);
 
-        fetch('scan.php', {
+        fetch(window.location.href, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',

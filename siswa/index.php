@@ -31,6 +31,186 @@ function generateEan13($nis, $id = 0)
   return $base . $check;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'import_siswa') {
+  if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+    $message = 'File CSV gagal diunggah. Silakan coba lagi.';
+    $messageType = 'danger';
+  } else {
+    $tmpName = $_FILES['csv_file']['tmp_name'];
+    $ext = strtolower(pathinfo($_FILES['csv_file']['name'], PATHINFO_EXTENSION));
+
+    if (!is_uploaded_file($tmpName) || !in_array($ext, ['csv', 'txt'], true)) {
+      $message = 'Format file harus CSV atau TXT.';
+      $messageType = 'danger';
+    } else {
+      $handle = fopen($tmpName, 'r');
+      if (!$handle) {
+        $message = 'File CSV tidak dapat dibaca.';
+        $messageType = 'danger';
+      } else {
+        $rawHeader = fgets($handle);
+        if ($rawHeader === false || trim($rawHeader) === '') {
+          $message = 'Format CSV tidak valid. File kosong atau bukan CSV.';
+          $messageType = 'danger';
+        } else {
+          $header = false;
+          $detectedDelimiter = ',';
+
+          foreach ([',', ';', "\t"] as $delimiter) {
+            $candidate = str_getcsv($rawHeader, $delimiter);
+            if (count($candidate) >= 4) {
+              $header = $candidate;
+              $detectedDelimiter = $delimiter;
+              break;
+            }
+          }
+
+          if ($header === false) {
+            $message = 'Format CSV tidak valid. Gunakan pisah koma, titik koma, atau tab.';
+            $messageType = 'danger';
+          } else {
+            $header = array_map(function ($value) {
+              return trim(str_replace("\xEF\xBB\xBF", '', (string)$value));
+            }, $header);
+
+            $normalizedHeader = array_map(function ($column) {
+              $clean = strtolower((string)$column);
+              $clean = preg_replace('/[^a-z0-9]+/', '_', $clean);
+              return trim($clean, '_');
+            }, $header);
+
+            if (count($header) < 4) {
+              $message = 'Format CSV tidak valid. Header minimal harus berisi: nis,nama,kelas,jurusan.';
+              $messageType = 'danger';
+            } else {
+              $map = [];
+              $required = ['nis', 'nama', 'kelas', 'jurusan'];
+
+              foreach ($required as $field) {
+                $index = array_search($field, $normalizedHeader, true);
+                if ($index === false) {
+                  $message = 'Header CSV harus berisi kolom: nis, nama, kelas, jurusan. Kolom jenis_kelamin, shift, dan status akan diisi otomatis.';
+                  $messageType = 'danger';
+                  $map = null;
+                  break;
+                }
+
+                $map[$field] = $index;
+              }
+
+              if ($map !== null) {
+                $optionalFields = ['jenis_kelamin' => 'L', 'shift' => 'pagi', 'status' => 'aktif'];
+                foreach ($optionalFields as $field => $defaultValue) {
+                  $index = array_search($field, $normalizedHeader, true);
+                  if ($index !== false) {
+                    $map[$field] = $index;
+                  }
+                }
+
+                $inserted = 0;
+                $skipped = 0;
+                $errors = [];
+
+                $conn->begin_transaction();
+                try {
+                  while (($row = fgetcsv($handle, 1000, $detectedDelimiter)) !== false) {
+                    if ($row === [null] || count(array_filter(array_map('trim', $row), fn($v) => $v !== '')) === 0) {
+                      continue;
+                    }
+
+                    $nis = trim((string)($row[$map['nis']] ?? ''));
+                    $nama = trim((string)($row[$map['nama']] ?? ''));
+                    $kelas = trim((string)($row[$map['kelas']] ?? ''));
+                    $jurusan = trim((string)($row[$map['jurusan']] ?? ''));
+                    $jenisKelamin = isset($map['jenis_kelamin'], $row[$map['jenis_kelamin']])
+                      ? strtoupper(trim((string)$row[$map['jenis_kelamin']]))
+                      : 'L';
+                    $shift = isset($map['shift'], $row[$map['shift']])
+                      ? strtolower(trim((string)$row[$map['shift']]))
+                      : 'pagi';
+                    $status = isset($map['status'], $row[$map['status']])
+                      ? strtolower(trim((string)$row[$map['status']]))
+                      : 'aktif';
+
+                    if ($nis === '' || $nama === '' || $kelas === '' || $jurusan === '') {
+                      $errors[] = 'Baris CSV tidak lengkap (NIS, Nama, Kelas, Jurusan wajib diisi).';
+                      $skipped++;
+                      continue;
+                    }
+
+                    if (!in_array($jenisKelamin, ['L', 'P'], true)) {
+                      $jenisKelamin = 'L';
+                    }
+
+                    if ($shift !== 'siang') {
+                      $shift = 'pagi';
+                    }
+
+                    if ($status !== 'nonaktif') {
+                      $status = 'aktif';
+                    }
+
+                    $shift = 'pagi';
+                    $status = 'aktif';
+
+                    $check = $conn->prepare("SELECT id FROM siswa WHERE nis = ? LIMIT 1");
+                    $check->bind_param('s', $nis);
+                    $check->execute();
+
+                    if ($check->get_result()->num_rows > 0) {
+                      $errors[] = 'NIS ' . htmlspecialchars($nis) . ' sudah ada di sistem; data dilewati.';
+                      $skipped++;
+                      continue;
+                    }
+
+                    $barcode = generateEan13($nis, 0);
+                    $stmt = $conn->prepare("INSERT INTO siswa (nis, nama, kelas, jurusan, jenis_kelamin, shift, barcode_code, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt->bind_param('ssssssss', $nis, $nama, $kelas, $jurusan, $jenisKelamin, $shift, $barcode, $status);
+
+                    if (!$stmt->execute()) {
+                      $errors[] = 'Gagal insert NIS ' . htmlspecialchars($nis) . ': ' . $conn->error;
+                      $skipped++;
+                      continue;
+                    }
+
+                    $inserted++;
+                  }
+
+                  $conn->commit();
+                } catch (Exception $e) {
+                  $conn->rollback();
+                  $message = 'Import gagal: ' . $e->getMessage();
+                  $messageType = 'danger';
+                }
+
+                if (empty($message)) {
+                  if ($inserted > 0) {
+                    $message = 'Berhasil import <strong>' . $inserted . '</strong> siswa.';
+                    $messageType = 'success';
+
+                    if ($skipped > 0) {
+                      $message .= ' Beberapa baris dilewati (' . $skipped . ').';
+                    }
+
+                    if (!empty($errors)) {
+                      $message .= ' ' . implode(' ', array_slice($errors, 0, 3));
+                    }
+                  } else {
+                    $message = 'Tidak ada data siswa yang berhasil diimport.';
+                    $messageType = 'warning';
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        fclose($handle);
+      }
+    }
+  }
+}
+
 // Handle Tambah / Edit Siswa Satuan (Via Modal Pop-Up)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_siswa') {
   $id = (int)($_POST['id'] ?? 0);
@@ -41,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   $jenis_kelamin = trim($_POST['jenis_kelamin'] ?? 'L');
   $shift = trim($_POST['shift'] ?? 'pagi');
   if ($shift !== 'siang') $shift = 'pagi';
-  $status = trim($_POST['status'] ?? 'aktif');
+  $status = 'aktif';
 
   if ($nis === '' || $nama === '' || $kelas === '' || $jurusan === '') {
     $message = 'Mohon lengkapi seluruh kolom yang bertanda bintang / wajib diisi.';
@@ -328,9 +508,12 @@ $filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJ
             <div style="font-size:16px;font-weight:700">Data Siswa</div>
             <div style="font-size:13px;color:rgba(255,255,255,0.7)">Kelola daftar siswa dan pengaturan shift rombel</div>
           </div>
-          <div>
+          <div class="d-flex gap-2 flex-wrap">
             <button type="button" class="btn btn-primary" id="btnOpenAddSiswa" style="font-weight:600;box-shadow:0 4px 12px rgba(37,99,235,0.25)">
               ➕ Tambah Siswa
+            </button>
+            <button type="button" class="btn btn-success" id="btnOpenImportCsv" style="font-weight:600;box-shadow:0 4px 12px rgba(16,185,129,0.25)">
+              📥 Import CSV
             </button>
           </div>
         </div>
@@ -467,6 +650,43 @@ $filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJ
       </div>
     </main>
   </div>
+  <div class="modal fade" id="modalImportCsv" tabindex="-1" aria-labelledby="modalImportCsvLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
+      <div class="modal-content" style="border-radius: 16px; overflow: hidden; border: none; box-shadow: 0 25px 60px rgba(15, 23, 42, 0.3);">
+        <div class="modal-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div>
+            <h6 class="modal-title mb-1" id="modalImportCsvLabel" style="font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 8px;">
+              <span>📥</span> <span>Import Data Siswa CSV</span>
+            </h6>
+            <div style="font-size: 12px; color: rgba(255,255,255,0.7);">Upload file CSV berisi daftar siswa untuk dimasukkan sekaligus</div>
+          </div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="action" value="import_siswa">
+          <div class="modal-body" style="padding: 22px 24px;">
+            <div class="mb-3">
+              <label class="form-label" style="font-weight: 600; font-size: 13px;">Pilih File CSV</label>
+              <input type="file" name="csv_file" class="form-control" accept=".csv,.txt" required>
+            </div>
+            <div class="alert alert-light border mb-0" style="font-size: 12px; border-radius: 10px;">
+              <strong>Format header:</strong>
+              <code style="display: block; margin-top: 6px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; background: #f1f3f5; border-radius: 6px;">nis,nama,kelas,jurusan</code>
+              <strong>Catatan:</strong> shift otomatis menjadi <code>pagi</code> dan status otomatis <code>aktif</code> saat import.
+              <div style="margin-top: 8px;"><strong>Contoh data:</strong>
+                <code style="display: block; margin-top: 6px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; background: #f1f3f5; border-radius: 6px;">1001,Andi,12,RPL</code>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer" style="padding: 14px 24px 20px; border-top: 1px solid #e5e7eb; background: #fff;">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+            <button type="submit" class="btn btn-success">Import CSV</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Pop-Up Tambah / Edit Siswa Satuan (Dengan Animasi Muncul & Keluar) -->
   <div class="modal fade" id="modalSiswaForm" tabindex="-1" aria-labelledby="modalSiswaFormLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg" style="max-width: 580px;">
@@ -519,9 +739,9 @@ $filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJ
               </div>
             </div>
 
-            <!-- Jenis Kelamin & Status -->
+            <!-- Jenis Kelamin -->
             <div class="row g-3 mb-3">
-              <div class="col-md-6">
+              <div class="col-md-12">
                 <label class="form-label" style="font-weight: 600; font-size: 13px; display: block;">Jenis Kelamin <span class="text-danger">*</span></label>
                 <div class="d-flex gap-2 mt-1">
                   <label class="d-flex align-items-center gap-2 p-2 border rounded-3 flex-fill" style="background:#f8fafc; cursor:pointer; font-size:13px;">
@@ -533,13 +753,6 @@ $filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJ
                     <span>👩 Perempuan</span>
                   </label>
                 </div>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label" style="font-weight: 600; font-size: 13px;">Status Siswa</label>
-                <select name="status" id="siswaFormStatus" class="form-select">
-                  <option value="aktif">🟢 Aktif</option>
-                  <option value="nonaktif">🔴 Nonaktif</option>
-                </select>
               </div>
             </div>
 
@@ -722,11 +935,13 @@ $filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJ
       // Inisialisasi Modal Instances
       // ----------------------------------------------------
       const modalSiswaFormEl = document.getElementById('modalSiswaForm');
+      const modalImportCsvEl = document.getElementById('modalImportCsv');
       const modalBulkEditEl = document.getElementById('modalBulkEdit');
       const modalBulkDeleteEl = document.getElementById('modalBulkDelete');
       const modalSingleDeleteEl = document.getElementById('modalSingleDelete');
 
       const modalSiswaForm = new bootstrap.Modal(modalSiswaFormEl);
+      const modalImportCsv = new bootstrap.Modal(modalImportCsvEl);
       const modalBulkEdit = new bootstrap.Modal(modalBulkEditEl);
       const modalBulkDelete = new bootstrap.Modal(modalBulkDeleteEl);
       const modalSingleDelete = new bootstrap.Modal(modalSingleDeleteEl);
@@ -735,6 +950,7 @@ $filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJ
       // ELEMEN FORM MODAL TAMBAH / EDIT SISWA
       // ----------------------------------------------------
       const btnOpenAddSiswa = document.getElementById('btnOpenAddSiswa');
+      const btnOpenImportCsv = document.getElementById('btnOpenImportCsv');
       const btnEditSiswaList = document.querySelectorAll('.btn-edit-siswa');
       const modalSiswaIcon = document.getElementById('modalSiswaIcon');
       const modalSiswaTitle = document.getElementById('modalSiswaTitle');
@@ -767,12 +983,16 @@ $filterJurusanList = array_values(array_unique(array_filter(array_merge($masterJ
           siswaFormJurusan.value = '';
           if (siswaJkL) siswaJkL.checked = true;
           if (siswaShiftPagi) siswaShiftPagi.checked = true;
-          if (siswaFormStatus) siswaFormStatus.value = 'aktif';
-
           modalSiswaForm.show();
           setTimeout(() => {
             if (siswaFormNis) siswaFormNis.focus();
           }, 150);
+        });
+      }
+
+      if (btnOpenImportCsv) {
+        btnOpenImportCsv.addEventListener('click', function() {
+          modalImportCsv.show();
         });
       }
 

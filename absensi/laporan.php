@@ -458,22 +458,121 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
     }
 
     function printReport(){
-      // build printable document from main content
-      const mainInner = document.querySelector('.main-inner');
-      if (!mainInner) return alert('Tidak ada konten untuk dicetak');
-      const base = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/,'/');
+      const mainTable = document.querySelector('.card table.table');
+      if (!mainTable) return alert('Tidak ada rekap laporan untuk dicetak');
+
+      const clone = mainTable.cloneNode(true);
+      clone.querySelectorAll('button, input, select, textarea, a').forEach(n => n.remove());
+      clone.querySelectorAll('span.tag, span.badge').forEach(node => {
+        const cell = node.parentElement;
+        if (cell) {
+          cell.textContent = node.textContent.trim();
+        }
+      });
+
+      const from = <?= json_encode($from ?: 'Semua tanggal') ?>;
+      const to = <?= json_encode($to ?: 'Semua tanggal') ?>;
+      const rangeText = (from !== 'Semua tanggal' || to !== 'Semua tanggal')
+        ? 'Periode: ' + from + ' s.d. ' + to
+        : 'Periode: Semua tanggal';
+
       const doc = document.getElementById('printFrame').contentWindow.document;
       doc.open();
-      doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Print Laporan</title>');
-      doc.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">');
-      doc.write('<link rel="stylesheet" href="'+base+'../assets/style.css?v=2.1">');
-      doc.write('</head><body>');
-      // clone content and remove interactive controls
-      const clone = mainInner.cloneNode(true);
-      clone.querySelectorAll('form, button, input, select, textarea, .manage-holidays, .fc').forEach(n=>n.remove());
-      doc.write(clone.outerHTML);
-      doc.write('<script>window.onload=function(){ setTimeout(function(){ window.print(); },200); }<\/script>');
-      doc.write('</body></html>');
+      doc.write(`<!doctype html>
+        <html lang="id">
+        <head>
+          <meta charset="utf-8">
+          <title>Rekap Per Siswa</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              padding: 18px 12px 24px;
+              background: #ffffff;
+              color: #111827;
+              font-family: Arial, Helvetica, sans-serif;
+            }
+            .print-wrap {
+              width: 100%;
+              max-width: 1000px;
+              margin: 0 auto;
+            }
+            .print-header {
+              margin-bottom: 10px;
+            }
+            .print-title {
+              margin: 0;
+              font-size: 26px;
+              line-height: 1.2;
+              font-weight: 700;
+              letter-spacing: -0.4px;
+              color: #111827;
+            }
+            .print-sub {
+              margin: 4px 0 0;
+              font-size: 11px;
+              color: #4b5563;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+              font-size: 11px;
+              border: 1px solid #cfcfcf;
+              background: #fff;
+            }
+            th, td {
+              border: 1px solid #cfcfcf;
+              padding: 6px 6px;
+              vertical-align: middle;
+              text-align: center;
+              word-wrap: break-word;
+            }
+            thead th {
+              background: #f5f5f5;
+              font-weight: 700;
+              color: #111827;
+              font-size: 11px;
+            }
+            tbody tr:nth-child(even) td {
+              background: #fafafa;
+            }
+            tbody td:first-child,
+            tbody td:nth-child(2),
+            tbody td:nth-child(3),
+            tbody td:nth-child(4) {
+              text-align: left;
+            }
+            tbody td:nth-child(5),
+            tbody td:nth-child(6),
+            tbody td:nth-child(7),
+            tbody td:nth-child(8),
+            tbody td:nth-child(9),
+            tbody td:nth-child(10) {
+              text-align: center;
+            }
+            .print-table-head { font-weight: 700; }
+            @page {
+              size: A4 portrait;
+              margin: 12mm 10mm 14mm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-wrap">
+            <div class="print-header">
+              <h1 class="print-title">Rekap Per Siswa</h1>
+              <p class="print-sub">${rangeText}</p>
+            </div>
+            ${clone.outerHTML}
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); }, 200);
+            };
+          <\/script>
+        </body>
+        </html>`);
       doc.close();
     }
   </script>

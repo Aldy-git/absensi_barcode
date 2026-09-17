@@ -9,16 +9,41 @@ if (empty($_SESSION['user_id'])) {
 
 $role = $_SESSION['role'];
 
+function barcodeProviderUrl($code, $type, $scale = 3)
+{
+  $encodedCode = urlencode($code);
+
+  if ($type === 'QRCode') {
+    return 'https://quickchart.io/qr?text=' . $encodedCode . '&size=300&margin=2&ecLevel=M&format=png';
+  }
+
+  $barcodeType = $type === 'Code128' ? 'code128' : 'ean13';
+  if ($barcodeType === 'ean13') {
+    $code = substr(preg_replace('/\D/', '', $code), 0, 12);
+  }
+
+  return 'https://bwipjs-api.metafloor.com/?bcid=' . $barcodeType . '&text=' . urlencode($code) . '&scale=' . (int)$scale . '&includetext=true&background=FFFFFF';
+}
+
 // ----------------------------------------------------
-// Direct Barcode Image Download Handler
+// Barcode image proxy and download handler
 // ----------------------------------------------------
-if (isset($_GET['download']) && !empty($_GET['code'])) {
-  $code = trim($_GET['code']);
+if ((isset($_GET['download']) || isset($_GET['image'])) && (!empty($_GET['code']) || !empty($_GET['data']))) {
+  $isImageRequest = isset($_GET['image']);
+  $code = trim($_GET[$isImageRequest ? 'data' : 'code']);
   $type = trim($_GET['type'] ?? 'EAN13');
   $nama = preg_replace('/[^a-zA-Z0-9_-]/', '_', trim($_GET['nama'] ?? 'siswa'));
   $nis = preg_replace('/[^a-zA-Z0-9_-]/', '_', trim($_GET['nis'] ?? ''));
   $filename = "barcode_" . strtolower($type) . "_" . ($nis ? $nis . "_" : "") . $nama . ".png";
-  $url = "https://barcode.tec-it.com/barcode.ashx?data=" . urlencode($code) . "&code=" . urlencode($type) . "&dpi=300";
+  $url = barcodeProviderUrl($code, $type, 3);
+  $cacheDir = __DIR__ . '/../uploads/barcodes';
+  $cacheFile = $cacheDir . '/' . sha1('provider-v2|' . $type . '|' . $code) . '.bin';
+
+  if (is_file($cacheFile) && filesize($cacheFile) > 0) {
+    $imgData = file_get_contents($cacheFile);
+  } else {
+    $imgData = false;
+  }
 
   $context = stream_context_create([
     'http' => [
@@ -31,11 +56,30 @@ if (isset($_GET['download']) && !empty($_GET['code'])) {
     ]
   ]);
 
-  $imgData = @file_get_contents($url, false, $context);
+  if ($imgData === false) {
+    for ($attempt = 0; $attempt < 3 && $imgData === false; $attempt++) {
+      $imgData = @file_get_contents($url, false, $context);
+      if ($imgData === false) {
+        usleep(250000);
+      }
+    }
+
+    if ($imgData !== false && strlen($imgData) > 0) {
+      if (!is_dir($cacheDir)) {
+        mkdir($cacheDir, 0755, true);
+      }
+      file_put_contents($cacheFile, $imgData, LOCK_EX);
+    }
+  }
+
   if ($imgData !== false && strlen($imgData) > 0) {
     header('Content-Description: File Transfer');
     header('Content-Type: image/png');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    if ($isImageRequest) {
+      header('Content-Disposition: inline');
+    } else {
+      header('Content-Disposition: attachment; filename="' . $filename . '"');
+    }
     header('Content-Transfer-Encoding: binary');
     header('Expires: 0');
     header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
@@ -44,8 +88,9 @@ if (isset($_GET['download']) && !empty($_GET['code'])) {
     echo $imgData;
     exit;
   } else {
-    // Fallback: Redirect to the image directly
-    header('Location: ' . $url);
+    http_response_code(502);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Gambar barcode gagal dibuat.';
     exit;
   }
 }
@@ -272,7 +317,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                 $jurusanStr = !empty($s['jurusan']) ? ' (' . htmlspecialchars($s['jurusan']) . ')' : '';
                 $kelasInfo = htmlspecialchars($s['kelas'] ?? '') . $jurusanStr;
                 $codeVal = $s['barcode_code'];
-                $imgUrl = "https://barcode.tec-it.com/barcode.ashx?data=" . urlencode($codeVal) . "&code=" . urlencode($barcodeType) . "&dpi=96";
+                $imgUrl = "barcode.php?image=1&data=" . urlencode($codeVal) . "&type=" . urlencode($barcodeType);
                 $imgHeight = ($barcodeType === 'QRCode') ? '110px' : '80px';
                 $imgWidth = ($barcodeType === 'QRCode') ? '110px' : '100%';
               ?>
@@ -281,7 +326,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
                     <?= $allowedTypes[$barcodeType]['icon'] ?> <?= htmlspecialchars($allowedTypes[$barcodeType]['label']) ?>
                   </span>
                   <div style="min-height:115px;display:flex;align-items:center;justify-content:center;width:100%;padding-top:12px">
-                    <img src="<?= $imgUrl ?>" alt="Barcode <?= htmlspecialchars($s['nama']) ?>" style="max-height:<?= $imgHeight ?>;max-width:<?= $imgWidth ?>;object-fit:contain" loading="lazy">
+                    <img src="<?= $imgUrl ?>" alt="Barcode <?= htmlspecialchars($s['nama']) ?>" style="max-height:<?= $imgHeight ?>;max-width:<?= $imgWidth ?>;object-fit:contain" loading="lazy" onerror="retryBarcodeImage(this)">
                   </div>
                   <div class="barcode-name"><?= htmlspecialchars($s['nama']) ?></div>
                   <div class="barcode-sub" style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
@@ -322,6 +367,17 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
   </div>
 
   <script>
+    function retryBarcodeImage(image) {
+      const retryCount = Number(image.dataset.retryCount || 0);
+      if (retryCount >= 3) return;
+
+      image.dataset.retryCount = String(retryCount + 1);
+      const separator = image.src.includes('&retry=') ? '&retry=' : '&retry=';
+      setTimeout(function() {
+        image.src = image.src.split('&retry=')[0] + separator + image.dataset.retryCount;
+      }, 700 * (retryCount + 1));
+    }
+
     // Handle Download Barcode
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('.btn-download');
@@ -372,7 +428,7 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
       const jurusan = btn.getAttribute('data-jurusan') || '';
       const kelasInfo = kelas + (jurusan ? ' (' + jurusan + ')' : '');
 
-      const src = 'https://barcode.tec-it.com/barcode.ashx?data=' + encodeURIComponent(code) + '&code=' + encodeURIComponent(type) + '&dpi=300';
+      const src = 'barcode.php?image=1&data=' + encodeURIComponent(code) + '&type=' + encodeURIComponent(type);
 
       try {
         const iframe = document.createElement('iframe');
@@ -413,21 +469,22 @@ $jurusanList = $conn->query("SELECT DISTINCT jurusan FROM siswa ORDER BY jurusan
         idoc.write(html);
         idoc.close();
 
-        iframe.onload = function() {
-          setTimeout(function() {
-            try {
-              iframe.contentWindow.focus();
-              iframe.contentWindow.print();
-            } catch (err) {}
-          }, 350);
-        };
+        let hasPrinted = false;
+        const printFrame = function() {
+          if (hasPrinted) return;
+          hasPrinted = true;
 
-        setTimeout(function() {
           try {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
           } catch (err) {}
-        }, 900);
+        };
+
+        iframe.onload = function() {
+          setTimeout(printFrame, 350);
+        };
+
+        setTimeout(printFrame, 900);
       } catch (ex) {
         alert('Gagal membuka jendela cetak: ' + ex.message);
       }
